@@ -332,4 +332,5 @@
           ```
             -- "$@"
           ```))
-    (os/execute ["chmod" "+w" run-path] :xp)))
+    (os/execute ["chmod" "+x" run-path] :xp))
+  :ok)
