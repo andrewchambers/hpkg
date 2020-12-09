@@ -224,6 +224,7 @@
         ["nsjail"
          "-Mo"
          "-q"
+         "-t" "0"
          "-B" (string fs-dir ":/out")
          "-B" "/dev"
          "-m" "none:/build:tmpfs:size=10000000000"
@@ -297,22 +298,22 @@
       (build-pkg* pkg))
     
     (def all-pkgs (recursive-pkg-dependencies pkgs))
-    
+    (def run-path (path/join out-path "run"))
+
     (when (os/stat out-path)
-      (errorf "%v already exists" out-path))
+      (unless (os/stat run-path)
+        (errorf "%v already exists and is not an existing venv" out-path)))
 
     (os/mkdir out-path)
     (def all-fs-paths (map |(path/join (pkg-path $) "fs") all-pkgs))
     (eprintf "copying files to venv...")
-    (os/execute ["rsync" "--ignore-existing" "-a" ;all-fs-paths out-path] :xp)
-    
-    (def run-path (path/join out-path "run"))
+    (os/execute ["rsync" "--delete" "-a" ;all-fs-paths out-path] :xp)
 
     (spit run-path 
           (string 
           ```
           #! /bin/sh
-          exec nsjail -Mo -e -Q -t 0 --rw --chroot / \
+          exec nsjail -Me -e -Q -t 0 -D "$PWD" --rw --chroot / \
             --skip_setsid \
             --rlimit_as max \
             --rlimit_cpu max \
@@ -320,6 +321,7 @@
             --rlimit_nofile max \
             --rlimit_nproc max \
             --rlimit_stack max \
+            --keep_caps \
             --disable_proc \
             --disable_clone_newcgroup \
             --disable_clone_newpid \

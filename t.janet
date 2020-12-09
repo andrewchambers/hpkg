@@ -220,9 +220,9 @@
                     :url "http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=3d5db9ebe860"
                     :hash "sha256:75d5d255a2a273b6e651f82eecfabf6cbcd8eaeae70e86b417384c8f4a58d8d3"}]))
 
-(def mcm-gcc
+(def gcc
   (h/pkg
-    :name "mcm-gcc"
+    :name "gcc"
     :build
     ```
     #!/bin/sh
@@ -256,9 +256,9 @@
     # XXX It seems a builder should not be required.
     :build "#!/bin/dash"
     :make-depends [base]
-    :depends [base mcm-gcc]))
+    :depends [base gcc]))
 
 (h/init-pkg-store "/home/ac/src/h/test-store")
 (h/open-pkg-store "/home/ac/src/h/test-store")
 # (pp (h/build-pkg mcm-gcc))
-(h/venv "/tmp/my-venv" [base])
+(h/venv "/tmp/my-venv" [base gcc])
