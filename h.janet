@@ -1,6 +1,8 @@
 (import path)
 (import sqlite3)
 (import flock)
+(import posix-spawn)
+(import sh)
 (import ./build/_h)
 
 (defn pkg
@@ -13,6 +15,23 @@
   (default make-depends [])
   (default depends [])
   (_h/pkg name build content make-depends depends))
+
+(defn recusive-pkg-make-depends [pkg]
+  (def deps @{})
+  (def ordered-deps @[])
+
+  (defn recursive-pkg-depends
+    [pkg]
+    (unless (in deps pkg)
+      (put deps pkg true)
+      (array/push ordered-deps pkg)
+      (each dep (pkg :depends)
+        (recursive-pkg-depends dep))))
+
+  (each mdep (pkg :make-depends)
+    (recursive-pkg-depends mdep))
+
+  ordered-deps)
 
 (defn init-pkg-store
   [p]
@@ -71,7 +90,9 @@
 
 (defn- nuke-path
   [p]
-  (os/execute ["rm" "-rf" p] :xp)
+  (when (os/stat p)
+    (os/execute ["chmod" "-R" "+w" p] :xp)
+    (os/execute ["rm" "-rf" p] :xp))
   nil)
 
 (defn- check-path-hash
@@ -105,7 +126,7 @@
     (error
       (string/format "hash check failed!\npath: %s\nexpected: %v\ngot: %v" path expected actual))))
 
-(var build-pkg*)
+(var build-pkg* nil)
 
 (defn- build-pkg-from-content-spec
   [pkg]
@@ -145,16 +166,91 @@
     (errorf "package %s is already being built" (pkg-path pkg)))
 
   (defer (:close build-lock)
+
+    (eprintf "preparing build env for %s ..." (pkg-path pkg))
+
     (nuke-path full-pkg-path)
     (os/mkdir full-pkg-path)
-    (os/mkdir (path/join full-pkg-path "fs"))
-    (os/mkdir (path/join full-pkg-path "build-chroot"))
 
-    (nuke-path full-pkg-path))
+    (def fs-dir (path/join full-pkg-path "fs"))
+    (os/mkdir fs-dir)
+
+    (def build-dir (path/join full-pkg-path "build"))
+    (os/mkdir build-dir)
+
+    (def mnt-dir (path/join full-pkg-path "mnt"))
+    (os/mkdir mnt-dir)
+
+    (def chroot (path/join full-pkg-path "build-chroot"))
+
+    (def chroot-tmp (path/join chroot "/tmp"))
+    (def chroot-usr (path/join chroot "/usr/"))
+    (def chroot-usr-bin (path/join chroot "/usr/bin"))
+    (def chroot-bin (path/join chroot "/bin"))
+    (def chroot-etc (path/join chroot "/etc"))
+    (def chroot-var (path/join chroot "/var"))
+    (def chroot-var (path/join chroot "/out"))
+    (def chroot-proc (path/join chroot "/proc"))
+    (def chroot-dev (path/join chroot "/dev"))
+    (def chroot-build (path/join chroot "/build"))
+    (def chroot-paths [chroot chroot-usr chroot-usr-bin chroot-bin chroot-etc
+                       chroot-var chroot-build chroot-tmp chroot-proc chroot-dev])
+
+    (each p chroot-paths
+      (os/mkdir p))
+
+    (def build-script (path/join chroot "builder"))
+    (spit build-script (pkg :build))
+    (os/chmod build-script 8r755)
+
+    (def union-paths
+      (array/concat @[chroot]
+                    (map |(path/join (pkg-path $) "fs") (recusive-pkg-make-depends pkg))))
+
+    (with [fs-proc (posix-spawn/spawn [(sh/$<_ which unionfs)
+                                       "-f"
+                                       "-oauto_unmount,use_ino,kernel_cache"
+                                       (string/join union-paths ":")
+                                       mnt-dir])]
+
+      # wait for fs to come up, can we improve from busy waiting?
+      (while (not (os/stat (path/join mnt-dir "builder")))
+        (os/sleep 0.1)
+        (when (fs-proc :exit-code)
+          (error "fuse filesystem exited during setup")))
+
+      (os/execute
+        ["nsjail"
+         "-Mo"
+         "-q"
+         "-B" (string fs-dir ":/out")
+         "-B" (string build-dir ":/build")
+         "-B" "/dev"
+         "-T" "/tmp"
+         "-E" "out=/out"
+         "-E" "PATH=/bin:/usr/bin"
+         "-D" "/build"
+         "--chroot" mnt-dir
+         "--rlimit_as" "max"
+         "--rlimit_cpu" "max"
+         "--rlimit_fsize" "max"
+         "--rlimit_nofile" "max"
+         "--rlimit_nproc" "max"
+         "--rlimit_stack" "max"
+         "--" "/builder"]
+        :xp)
+
+      (when (fs-proc :exit-code)
+        (error "fuse filesystem exited during build")))
+
+    (nuke-path build-dir)
+    (nuke-path mnt-dir)
+    (nuke-path chroot))
   nil)
 
 (varfn build-pkg*
   [pkg]
+  (def full-pkg-path (pkg-path pkg))
   (unless (has-pkg? pkg)
     (if (pkg :content)
       (build-pkg-from-content-spec pkg)
@@ -164,7 +260,8 @@
       (string/format "%j" {:depends (map |($ :hash) (pkg :depends))}))
 
     (sqlite3/eval *store-db* "insert into Pkgs(Hash, Name) Values(:hash, :name);"
-                  {:hash (pkg :hash) :name (pkg :name)})))
+                  {:hash (pkg :hash) :name (pkg :name)}))
+  full-pkg-path)
 
 (defn build-pkg
   [pkg]
@@ -176,9 +273,18 @@
   (unless gc-lock
     (error "garbage collection in progress"))
 
-  (def full-pkg-path (pkg-path pkg))
+  (defer (:close gc-lock)
+    (build-pkg* pkg)))
+
+(defn export-tarball
+  [pkgs outf]
+  (unless *store-is-open*
+    (error "package store is not open, use 'open-pkg-store'"))
+
+  (def gc-lock (acquire-gc-lock :noblock :shared))
+
+  (unless gc-lock
+    (error "garbage collection in progress"))
 
   (defer (:close gc-lock)
-    (build-pkg* pkg))
-
-  full-pkg-path)
+    (build-pkg* pkg)))

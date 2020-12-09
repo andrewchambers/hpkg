@@ -113,6 +113,7 @@ static void hash_opt_string(Sha256ctx *hash_ctx, Janet v) {
     buf[2] = (n & 0xff00) >> 8;
     buf[3] = (n & 0xff0000) >> 16;
     buf[4] = (n & 0xff000000) >> 24;
+    sha256_update(hash_ctx, buf, sizeof(buf));
     sha256_update(hash_ctx, (uint8_t *)s, n);
     break;
   }
