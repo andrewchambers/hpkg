@@ -286,7 +286,7 @@
 
 
 
-(h/init-pkg-store "/home/ac/src/h/test-store")
-(h/open-pkg-store "/home/ac/src/h/test-store")
+(h/init-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
+(h/open-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 # (pp (h/build-pkg mcm-gcc))
 (h/venv "/tmp/my-venv" [bash base-dev])
