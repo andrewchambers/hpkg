@@ -260,4 +260,5 @@
 
 (h/init-pkg-store "/home/ac/src/h/test-store")
 (h/open-pkg-store "/home/ac/src/h/test-store")
-(pp (h/build-pkg mcm-gcc))
+# (pp (h/build-pkg mcm-gcc))
+(h/venv "/tmp/my-venv" [base])

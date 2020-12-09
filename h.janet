@@ -1,6 +1,7 @@
 (import path)
 (import sqlite3)
 (import flock)
+(import shlex)
 (import posix-spawn)
 (import sh)
 (import ./build/_h)
@@ -16,20 +17,20 @@
   (default depends [])
   (_h/pkg name build content make-depends depends))
 
-(defn recusive-pkg-make-depends [pkg]
+(defn recursive-pkg-dependencies [pkgs]
   (def deps @{})
   (def ordered-deps @[])
 
-  (defn recursive-pkg-depends
+  (defn recursive-pkg-dependencies
     [pkg]
     (unless (in deps pkg)
       (put deps pkg true)
       (array/push ordered-deps pkg)
       (each dep (pkg :depends)
-        (recursive-pkg-depends dep))))
+        (recursive-pkg-dependencies dep))))
 
-  (each mdep (pkg :make-depends)
-    (recursive-pkg-depends mdep))
+  (each pkg pkgs
+    (recursive-pkg-dependencies pkg))
 
   ordered-deps)
 
@@ -144,6 +145,7 @@
     (each content-spec (pkg :content)
       (def content-path
         (path/join full-pkg-path "fs" (path/normalize (content-spec :path))))
+      (eprintf "downloading %s to %s" (content-spec :url) content-path)
       (os/execute ["mkdir" "-p" (path/dirname content-path)] :xp)
       (os/execute ["curl" "-L" "-o" content-path (content-spec :url)] :xp)
       (assert-path-hash content-path (content-spec :hash))
@@ -175,9 +177,6 @@
     (def fs-dir (path/join full-pkg-path "fs"))
     (os/mkdir fs-dir)
 
-    (def build-dir (path/join full-pkg-path "build"))
-    (os/mkdir build-dir)
-
     (def mnt-dir (path/join full-pkg-path "mnt"))
     (os/mkdir mnt-dir)
 
@@ -205,7 +204,8 @@
 
     (def union-paths
       (array/concat @[chroot]
-                    (map |(path/join (pkg-path $) "fs") (recusive-pkg-make-depends pkg))))
+                    (map |(path/join (pkg-path $) "fs") 
+                         (recursive-pkg-dependencies (pkg :make-depends)))))
 
     (with [fs-proc (posix-spawn/spawn [(sh/$<_ which unionfs)
                                        "-f"
@@ -214,19 +214,20 @@
                                        mnt-dir])]
 
       # wait for fs to come up, can we improve from busy waiting?
-      (while (not (os/stat (path/join mnt-dir "builder")))
-        (os/sleep 0.1)
-        (when (fs-proc :exit-code)
-          (error "fuse filesystem exited during setup")))
+      (let [builder-path (path/join mnt-dir "builder")]
+        (while (not (os/stat builder-path))
+          (os/sleep 0.1)
+          (when (fs-proc :exit-code)
+            (error "fuse filesystem exited during setup"))))
 
       (os/execute
         ["nsjail"
          "-Mo"
          "-q"
          "-B" (string fs-dir ":/out")
-         "-B" (string build-dir ":/build")
          "-B" "/dev"
-         "-T" "/tmp"
+         "-m" "none:/build:tmpfs:size=10000000000"
+         "-m" "none:/tmp:tmpfs:size=10000000000"
          "-E" "out=/out"
          "-E" "PATH=/bin:/usr/bin"
          "-D" "/build"
@@ -243,7 +244,6 @@
       (when (fs-proc :exit-code)
         (error "fuse filesystem exited during build")))
 
-    (nuke-path build-dir)
     (nuke-path mnt-dir)
     (nuke-path chroot))
   nil)
@@ -276,8 +276,14 @@
   (defer (:close gc-lock)
     (build-pkg* pkg)))
 
-(defn export-tarball
-  [pkgs outf]
+(defn venv
+  [out-path pkgs &keys {
+    :binds binds
+  }]
+  (def out-path (path/abspath out-path))
+
+  (default binds ["/bin" "/lib"])
+
   (unless *store-is-open*
     (error "package store is not open, use 'open-pkg-store'"))
 
@@ -287,4 +293,43 @@
     (error "garbage collection in progress"))
 
   (defer (:close gc-lock)
-    (build-pkg* pkg)))
+    (each pkg pkgs
+      (build-pkg* pkg))
+    
+    (def all-pkgs (recursive-pkg-dependencies pkgs))
+    
+    (when (os/stat out-path)
+      (errorf "%v already exists" out-path))
+
+    (os/mkdir out-path)
+    (def all-fs-paths (map |(path/join (pkg-path $) "fs") all-pkgs))
+    (eprintf "copying files to venv...")
+    (os/execute ["rsync" "--ignore-existing" "-a" ;all-fs-paths out-path] :xp)
+    
+    (def run-path (path/join out-path "run"))
+
+    (spit run-path 
+          (string 
+          ```
+          #! /bin/sh
+          exec nsjail -Mo -e -Q -t 0 --rw --chroot / \
+            --skip_setsid \
+            --rlimit_as max \
+            --rlimit_cpu max \
+            --rlimit_fsize max \
+            --rlimit_nofile max \
+            --rlimit_nproc max \
+            --rlimit_stack max \
+            --disable_proc \
+            --disable_clone_newcgroup \
+            --disable_clone_newpid \
+            --disable_clone_newnet \
+            --disable_clone_newipc \
+            --disable_clone_newuts \
+
+          ```
+          ;(map |(string "  -B " (shlex/quote (path/join out-path "fs" $)) ":" (shlex/quote $) "\\\n") binds)
+          ```
+            -- "$@"
+          ```))
+    (os/execute ["chmod" "+w" run-path] :xp)))
