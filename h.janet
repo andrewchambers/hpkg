@@ -182,8 +182,6 @@
 
     (def chroot (path/join full-pkg-path "build-chroot"))
     (def chroot-tmp (path/join chroot "/tmp"))
-    (def chroot-usr (path/join chroot "/usr/"))
-    (def chroot-usr-bin (path/join chroot "/usr/bin"))
     (def chroot-bin (path/join chroot "/bin"))
     (def chroot-etc (path/join chroot "/etc"))
     (def chroot-var (path/join chroot "/var"))
@@ -191,7 +189,7 @@
     (def chroot-proc (path/join chroot "/proc"))
     (def chroot-dev (path/join chroot "/dev"))
     (def chroot-build (path/join chroot "/build"))
-    (def chroot-paths [chroot chroot-usr chroot-usr-bin chroot-bin chroot-etc
+    (def chroot-paths [chroot chroot-bin chroot-etc
                        chroot-var chroot-out chroot-build chroot-tmp chroot-proc chroot-dev])
 
     (each p chroot-paths
@@ -282,7 +280,7 @@
   }]
   (def out-path (path/abspath out-path))
 
-  (default binds ["/bin" "/lib"])
+  (default binds ["/bin" "/usr" "/lib"])
 
   (unless *store-is-open*
     (error "package store is not open, use 'open-pkg-store'"))

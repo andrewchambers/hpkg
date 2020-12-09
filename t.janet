@@ -255,6 +255,20 @@
     :make-depends [patch make dash seed gcc-src]))
 
 
+# XXX split C++ away from C.
+(def gcc-rt
+  (h/pkg
+    :name "gcc-rt"
+    :build
+    ```
+    #!/bin/sh
+    set -eux
+    mkdir "$out/lib/"
+    cp -vr /x86_64-linux-musl/lib/*.so* "$out/lib/"
+    ```
+    :make-depends [dash coreutils gcc]))
+
+
 (def base-dev
   (h/pkg
     :name "base"
@@ -271,22 +285,40 @@
 (def bash
   (h/pkg
     :name "bash"
-    :make-depends [base-dev bash-src]
-    :depends []
+    :make-depends [base-dev bash-src gcc-rt]
+    :depends [gcc-rt]
     :build
     ```
     #! /bin/sh
     set -eux
     tar xf /src/*
     cd *
-    export CFLAGS="--static"
     ./configure --without-bash-malloc --prefix=""
     make -j$(nproc) install DESTDIR="$out"
     ```))
 
+(defsrc perl-src
+  :url
+  "https://www.cpan.org/src/5.0/perl-5.30.2.tar.gz"
+  :hash
+  "sha256:66db7df8a91979eb576fac91743644da878244cf8ee152f02cd6f5cd7a731689")
 
+(def perl
+  (h/pkg
+    :name "bash"
+    :make-depends [base-dev perl-src gcc-rt]
+    :depends [gcc-rt]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    ./configure.gnu -Dcc=gcc --prefix=""
+    make -j$(nproc) install DESTDIR="$out"
+    ```))
 
 (h/init-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 (h/open-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 # (pp (h/build-pkg mcm-gcc))
-(h/venv "/tmp/my-venv" [bash base-dev])
+(h/venv "/tmp/my-venv" [perl base bash])
