@@ -124,7 +124,7 @@
          tar xf /src/*
          cd *
          export CC="x86_64-linux-musl-gcc -static"
-         ./configure --prefix="/"
+         ./configure --prefix=""
          ./build.sh
          ./make install DESTDIR="$out"
          ```
@@ -139,7 +139,7 @@
          tar xf /src/*
          cd *
          export CC="x86_64-linux-musl-gcc -static"
-         ./configure --prefix="/"
+         ./configure --prefix=""
          make -j$(nproc) install DESTDIR="$out"
          ln -s /bin/dash "$out/bin/sh"
          ```
@@ -157,7 +157,7 @@
             tar xf /src/*
             cd *
             export CC="x86_64-linux-musl-gcc -static"
-            ./configure --enable-shared=no --prefix="/"
+            ./configure --enable-shared=no --prefix=""
             make -j$(nproc) install DESTDIR="$out"
             ```
             :make-depends ,make-depends)))
@@ -246,6 +246,11 @@
     make extract_all
     make -j $(nproc)
     make install
+    cd $out/bin
+    for l in ar as c++ g++ cpp cc gcc ld nm objcopy obdjump readelf ranlib strings strip
+    do
+      ln -s ./x86_64-linux-musl-$l $l
+    done
     ```
     :make-depends [patch make dash seed gcc-src]))
 
@@ -256,9 +261,32 @@
     # XXX It seems a builder should not be required.
     :build "#!/bin/dash"
     :make-depends [base]
-    :depends [base gcc]))
+    :depends [base make gcc]))
+
+
+(defsrc bash-src
+  :url "https://ftp.gnu.org/gnu/bash/bash-5.0.tar.gz"
+  :hash "sha256:b4a80f2ac66170b2913efbfb9f2594f1f76c7b1afd11f799e22035d63077fb4d")
+
+(def bash
+  (h/pkg
+    :name "bash"
+    :make-depends [base-dev bash-src]
+    :depends []
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    export CFLAGS="--static"
+    ./configure --without-bash-malloc --prefix=""
+    make -j$(nproc) install DESTDIR="$out"
+    ```))
+
+
 
 (h/init-pkg-store "/home/ac/src/h/test-store")
 (h/open-pkg-store "/home/ac/src/h/test-store")
 # (pp (h/build-pkg mcm-gcc))
-(h/venv "/tmp/my-venv" [base gcc])
+(h/venv "/tmp/my-venv" [bash base-dev])
