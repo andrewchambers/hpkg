@@ -15,6 +15,19 @@
          :build "#! /bin/bootstrap"
          :make-depends [bootstrap]))
 
+(def seed-bb
+  (h/pkg :name "seed-bb"
+         :build 
+         ```
+         #! /bin/sh
+         set -eux
+         mkdir "$out/bin"
+         cp /bin/busybox "$out/bin/busybox" 
+         for c in $("$out"/bin/busybox --list) ; do ln -s /bin/busybox "$out/bin/$c"  ; done
+          
+         ```
+         :make-depends [seed]))
+
 (defmacro defsrc
   [name &keys {:url url :hash hash :path file-name}]
   ~(def ,name (,h/pkg
@@ -115,8 +128,8 @@
   :hash
   "sha256:61f0b31b0d5ea0e862b454a80c170f57bad47879c0c42bd8de89200ff62ea210")
 
-(def make
-  (h/pkg :name "make"
+(def make-static
+  (h/pkg :name "make-static"
          :build
          ```
          #! /bin/sh
@@ -126,12 +139,12 @@
          export CC="x86_64-linux-musl-gcc -static"
          ./configure --prefix=""
          ./build.sh
-         ./make install DESTDIR="$out"
+         ./make install-strip DESTDIR="$out"
          ```
          :make-depends [seed make-src]))
 
-(def dash
-  (h/pkg :name "dash"
+(def patch-static
+  (h/pkg :name "patch-static"
          :build
          ```
          #! /bin/sh
@@ -140,47 +153,9 @@
          cd *
          export CC="x86_64-linux-musl-gcc -static"
          ./configure --prefix=""
-         make -j$(nproc) install DESTDIR="$out"
-         ln -s /bin/dash "$out/bin/sh"
+         make -j$(nproc) install-strip DESTDIR="$out"
          ```
-         :make-depends [seed make dash-src]))
-
-
-(defmacro defbase
-  [name &keys {:make-depends make-depends}]
-  ~(def ,name
-     (h/pkg :name ,(string name)
-            :build
-            ```
-            #! /bin/sh
-            set -eux
-            tar xf /src/*
-            cd *
-            export CC="x86_64-linux-musl-gcc -static"
-            ./configure --enable-shared=no --prefix=""
-            make -j$(nproc) install DESTDIR="$out"
-            ```
-            :make-depends ,make-depends)))
-
-(defbase coreutils :make-depends [seed make coreutils-src])
-(defbase awk :make-depends [seed make awk-src])
-(defbase diffutils :make-depends [seed make diffutils-src])
-(defbase findutils :make-depends [seed make findutils-src])
-(defbase patch :make-depends [seed make patch-src])
-(defbase sed :make-depends [seed make sed-src])
-(defbase grep :make-depends [seed make grep-src])
-(defbase gzip :make-depends [seed make gzip-src])
-(defbase which :make-depends [seed make which-src])
-(defbase tar :make-depends [seed make tar-src])
-(defbase xz :make-depends [seed make xz-src])
-
-(def base
-  (h/pkg
-    :name "base"
-    # XXX It seems a builder should not be required.
-    :build "#!/bin/dash"
-    :make-depends [dash]
-    :depends [dash coreutils awk diffutils findutils patch sed grep gzip which tar xz]))
+         :make-depends [seed make-static patch-src]))
 
 (def gcc-src
   (h/pkg :name "gcc-src"
@@ -252,22 +227,112 @@
       ln -s ./x86_64-linux-musl-$l $l
     done
     ```
-    :make-depends [patch make dash seed gcc-src]))
+    :make-depends [patch-static make-static seed gcc-src]))
 
 
-# XXX split C++ away from C.
-(def gcc-rt
+# XXX can we strip?
+(def gcc-rt-lite
   (h/pkg
-    :name "gcc-rt"
+    :name "gcc-rt-lite"
     :build
     ```
     #!/bin/sh
     set -eux
     mkdir "$out/lib/"
-    cp -vr /x86_64-linux-musl/lib/*.so* "$out/lib/"
+    cp -r /x86_64-linux-musl/lib/*.so* "$out/lib/"
+    rm -f "$out"/lib/libstdc++* "$out"/lib/libgomp*
     ```
-    :make-depends [dash coreutils gcc]))
+    :make-depends [seed gcc]))
 
+(defmacro defbase
+  [name &keys {:make-depends make-depends
+               :depends depends
+               :post-install post-install
+               :configure configure}]
+  (default configure `./configure --prefix=""`)
+
+  ~(def ,name
+     (h/pkg :name ,(string name)
+            :build
+            (string 
+              ```
+              #! /bin/sh
+              set -eux
+              tar xf /src/*
+              cd *
+
+              ```
+              ,configure
+              ```
+
+              make -j$(nproc) install-strip DESTDIR="$out"
+              
+              ```
+              ,post-install)
+            :make-depends ,make-depends
+            :depends ,depends)))
+
+(defbase make 
+  :make-depends [gcc gcc-rt-lite make-static seed-bb make-src]
+  :depends [gcc-rt-lite])
+
+(defbase coreutils 
+  :make-depends [gcc gcc-rt-lite make-static seed-bb coreutils-src]
+  :depends [gcc-rt-lite]
+  :post-install `mkdir -p "$out/usr/bin"; ln -s /bin/env "$out/usr/bin/env"`)
+
+(defbase dash
+  :make-depends [gcc gcc-rt-lite make seed-bb dash-src]
+  :depends [gcc-rt-lite]
+  :post-install `ln -s /bin/dash "$out/bin/sh"`)
+
+(defbase awk
+  :make-depends [gcc gcc-rt-lite make seed-bb awk-src]
+  :depends [gcc-rt-lite])
+
+(defbase diffutils
+  :make-depends [gcc gcc-rt-lite make seed-bb diffutils-src]
+  :depends [gcc-rt-lite])
+
+(defbase findutils
+  :make-depends [gcc gcc-rt-lite make seed-bb findutils-src]
+  :depends [gcc-rt-lite])
+
+(defbase patch
+  :make-depends [gcc gcc-rt-lite make seed-bb patch-src]
+  :depends [gcc-rt-lite])
+
+(defbase sed
+  :make-depends [gcc gcc-rt-lite make seed-bb sed-src]
+  :depends [gcc-rt-lite])
+
+(defbase grep
+  :make-depends [gcc gcc-rt-lite make seed-bb grep-src]
+  :depends [gcc-rt-lite])
+
+(defbase gzip
+  :make-depends [gcc gcc-rt-lite make seed-bb gzip-src]
+  :depends [gcc-rt-lite])
+
+(defbase which
+  :make-depends [gcc gcc-rt-lite make seed-bb which-src]
+  :depends [gcc-rt-lite])
+
+(defbase tar
+  :make-depends [gcc gcc-rt-lite make seed-bb tar-src]
+  :depends [gcc-rt-lite])
+
+(defbase xz
+  :make-depends [gcc gcc-rt-lite make seed-bb xz-src]
+  :depends [gcc-rt-lite])
+
+(def base
+  (h/pkg
+    :name "base"
+    # XXX It seems a builder should not be required.
+    :build "#!/bin/dash"
+    :make-depends [dash]
+    :depends [gcc-rt-lite dash coreutils awk diffutils findutils patch sed grep gzip which tar xz]))
 
 (def base-dev
   (h/pkg
@@ -277,7 +342,6 @@
     :make-depends [base]
     :depends [base make gcc]))
 
-
 (defsrc bash-src
   :url "https://ftp.gnu.org/gnu/bash/bash-5.0.tar.gz"
   :hash "sha256:b4a80f2ac66170b2913efbfb9f2594f1f76c7b1afd11f799e22035d63077fb4d")
@@ -285,8 +349,8 @@
 (def bash
   (h/pkg
     :name "bash"
-    :make-depends [base-dev bash-src gcc-rt]
-    :depends [gcc-rt]
+    :make-depends [base-dev bash-src gcc-rt-lite]
+    :depends [gcc-rt-lite]
     :build
     ```
     #! /bin/sh
@@ -294,7 +358,7 @@
     tar xf /src/*
     cd *
     ./configure --without-bash-malloc --prefix=""
-    make -j$(nproc) install DESTDIR="$out"
+    make -j$(nproc) install-strip DESTDIR="$out"
     ```))
 
 (defsrc perl-src
@@ -305,20 +369,42 @@
 
 (def perl
   (h/pkg
-    :name "bash"
-    :make-depends [base-dev perl-src gcc-rt]
-    :depends [gcc-rt]
+    :name "perl"
+    :make-depends [base-dev perl-src]
+    :depends [gcc-rt-lite]
     :build
     ```
     #! /bin/sh
     set -eux
     tar xf /src/*
     cd *
-    ./configure.gnu -Dcc=gcc --prefix=""
-    make -j$(nproc) install DESTDIR="$out"
+    ./configure.gnu -Dcc=gcc
+    make -j$(nproc) install-strip DESTDIR="$out"
+    ```))
+
+(defsrc openssl-src
+  :url
+  "https://www.openssl.org/source/openssl-1.1.1g.tar.gz"
+  :hash
+  "sha256:ddb04774f1e32f0c49751e21b67216ac87852ceb056b75209af2443400636d46")
+
+(def openssl
+  (h/pkg
+    :name "openssl"
+    :make-depends [perl base-dev openssl-src]
+    :depends [gcc-rt-lite]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    ./config --prefix="/"
+    make -j$(nproc)
+    make install-strip DESTDIR="$out"
     ```))
 
 (h/init-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 (h/open-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 # (pp (h/build-pkg mcm-gcc))
-(h/venv "/tmp/my-venv" [perl base bash])
+(h/venv "/tmp/my-venv" [perl])

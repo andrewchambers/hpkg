@@ -172,6 +172,7 @@
     (eprintf "preparing build env for %s ..." (pkg-path pkg))
 
     (nuke-path full-pkg-path)
+
     (os/mkdir full-pkg-path)
 
     (def fs-dir (path/join full-pkg-path "fs"))
@@ -189,8 +190,8 @@
     (def chroot-proc (path/join chroot "/proc"))
     (def chroot-dev (path/join chroot "/dev"))
     (def chroot-build (path/join chroot "/build"))
-    (def chroot-paths [chroot chroot-bin chroot-etc
-                       chroot-var chroot-out chroot-build chroot-tmp chroot-proc chroot-dev])
+    (def chroot-paths [chroot chroot-bin chroot-etc chroot-var
+                       chroot-out chroot-build chroot-tmp chroot-proc chroot-dev])
 
     (each p chroot-paths
       (os/mkdir p))
@@ -203,7 +204,6 @@
       (array/concat @[chroot]
                     (map |(path/join (pkg-path $) "fs") 
                          (recursive-pkg-dependencies (pkg :make-depends)))))
-
     (with [fs-proc (posix-spawn/spawn [(sh/$<_ which unionfs)
                                        "-f"
                                        "-oauto_unmount,use_ino,kernel_cache"
@@ -227,7 +227,7 @@
          "-m" "none:/build:tmpfs:size=10000000000"
          "-m" "none:/tmp:tmpfs:size=10000000000"
          "-E" "out=/out"
-         "-E" "PATH=/bin:/usr/bin"
+         "-E" "PATH=/bin:/usr/bin:/usr/local/bin"
          "-D" "/build"
          "--chroot" mnt-dir
          "--rlimit_as" "max"
@@ -280,7 +280,7 @@
   }]
   (def out-path (path/abspath out-path))
 
-  (default binds ["/bin" "/usr" "/lib"])
+  (default binds ["/bin" "/lib" "/usr"])
 
   (unless *store-is-open*
     (error "package store is not open, use 'open-pkg-store'"))
@@ -306,6 +306,8 @@
     (eprintf "copying files to venv...")
     (os/execute ["rsync" "--delete" "-a" ;all-fs-paths out-path] :xp)
 
+    (def filtered-binds (filter |(os/stat (path/join out-path "fs" $)) binds))
+
     (spit run-path 
           (string 
           ```
@@ -327,7 +329,7 @@
             --disable_clone_newuts \
 
           ```
-          ;(map |(string "  -B " (shlex/quote (path/join out-path "fs" $)) ":" (shlex/quote $) "\\\n") binds)
+          ;(map |(string "  -B " (shlex/quote (path/join out-path "fs" $)) ":" (shlex/quote $) "\\\n") filtered-binds)
           ```
             -- "$@"
           ```))
