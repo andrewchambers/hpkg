@@ -335,27 +335,27 @@
     (spit run-path
           (string
             ```
-          #! /bin/sh
-          exec nsjail -Me -e -Q -t 0 -D "$PWD" --rw --chroot / \
-            --skip_setsid \
-            --rlimit_as max \
-            --rlimit_cpu max \
-            --rlimit_fsize max \
-            --rlimit_nofile max \
-            --rlimit_nproc max \
-            --rlimit_stack max \
-            --keep_caps \
-            --disable_proc \
-            --disable_clone_newcgroup \
-            --disable_clone_newpid \
-            --disable_clone_newnet \
-            --disable_clone_newipc \
-            --disable_clone_newuts \
+            #! /bin/sh
+            exec nsjail -Me -e -Q -t 0 -D "$PWD" --rw --chroot / \
+              --skip_setsid \
+              --rlimit_as max \
+              --rlimit_cpu max \
+              --rlimit_fsize max \
+              --rlimit_nofile max \
+              --rlimit_nproc max \
+              --rlimit_stack max \
+              --keep_caps \
+              --disable_proc \
+              --disable_clone_newcgroup \
+              --disable_clone_newpid \
+              --disable_clone_newnet \
+              --disable_clone_newipc \
+              --disable_clone_newuts \
 
-          ```
-            ;(map |(string "  -B " (shlex/quote (path/join out-path "fs" $)) ":" (shlex/quote $) "\\\n") filtered-binds)
             ```
-            -- "$@"
-          ```))
+            ;(map |(string "  -B " (shlex/quote (path/join out-path "fs" $)) ":" (shlex/quote $) " \\\n") filtered-binds)
+            ```
+              -- "$@"
+            ```))
     (os/execute ["chmod" "+x" run-path] :xp))
   :ok)
