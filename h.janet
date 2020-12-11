@@ -304,7 +304,7 @@
   [out-path pkgs &keys {:binds binds}]
   (def out-path (path/abspath out-path))
 
-  (default binds ["/bin" "/lib" "/usr"])
+  (default binds ["bin" "lib" "usr"])
 
   (unless *store-is-open*
     (error "package store is not open, use 'open-pkg-store'"))
@@ -330,31 +330,28 @@
     (eprintf "copying files to venv...")
     (os/execute ["rsync" "--delete" "-a" ;all-fs-paths out-path] :xp)
 
-    (def filtered-binds (filter |(os/stat (path/join out-path "fs" $)) binds))
-
     (spit run-path
           (string
             ```
             #! /bin/sh
-            exec nsjail -Me -e -Q -t 0 -D "$PWD" --rw --chroot / \
-              --skip_setsid \
-              --rlimit_as max \
-              --rlimit_cpu max \
-              --rlimit_fsize max \
-              --rlimit_nofile max \
-              --rlimit_nproc max \
-              --rlimit_stack max \
-              --keep_caps \
-              --disable_proc \
-              --disable_clone_newcgroup \
-              --disable_clone_newpid \
-              --disable_clone_newnet \
-              --disable_clone_newipc \
-              --disable_clone_newuts \
+            set -e
+            unset venv_binds
+            for b in $(ls /)
+            do
 
             ```
-            ;(map |(string "  -B " (shlex/quote (path/join out-path "fs" $)) ":" (shlex/quote $) " \\\n") filtered-binds)
+            ;(map |(string "  if test \"$b\" = " (shlex/quote $) " ; then continue ; fi\n") binds)
             ```
+              venv_binds+=(--bind "/$b" "/$b")
+            done
+
+            exec bwrap \
+
+            ```
+            ;(map |(string "  --dev-bind-try " (shlex/quote (path/join out-path "fs" $)) " " (shlex/quote $) " \\\n") binds)
+            ```
+              "${venv_binds[@]}" \
+              --chdir "$PWD" \
               -- "$@"
             ```))
     (os/execute ["chmod" "+x" run-path] :xp))
