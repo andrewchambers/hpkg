@@ -345,7 +345,7 @@
             ```
             ;(map |(string "  if test \"$b\" = " (shlex/quote $) " ; then continue ; fi\n") binds)
             ```
-              venv_binds+=(--bind "/$b" "/$b")
+              venv_binds+=(--dev-bind "/$b" "/$b")
             done
 
             exec \
