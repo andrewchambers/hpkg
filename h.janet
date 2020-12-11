@@ -153,6 +153,32 @@
         (os/chmod content-path perms))))
   nil)
 
+(var- pkgfs-bin nil)
+(defn- find-pkgfs-bin
+  []
+
+  # XXX this does not check exec bit,
+  # This should maybe be in the stdlib.
+  # https://github.com/janet-lang/janet/issues/528
+
+  (defn look-path [exe]
+    (def PATH (os/getenv "PATH"))
+    (when (or (nil? PATH) (empty? PATH))
+      (error "PATH not set"))
+    (var r nil)
+    (each p (string/split ":" (os/getenv "PATH" ""))
+      (def full-p (path/join p exe))
+      (when (os/stat full-p)
+        (set r full-p)
+        (break)))
+    (unless r
+      (errorf "%v not found in PATH" exe))
+    r)
+
+  (if pkgfs-bin
+    pkgfs-bin
+    (set pkgfs-bin (look-path "pkgfs"))))
+
 (defn- build-pkg-from-build-script
   [pkg]
 
@@ -202,12 +228,12 @@
 
     (def union-paths
       (array/concat @[chroot]
-                    (map |(path/join (pkg-path $) "fs") 
+                    (map |(path/join (pkg-path $) "fs")
                          (recursive-pkg-dependencies (pkg :make-depends)))))
-    (with [fs-proc (posix-spawn/spawn [(sh/$<_ which unionfs)
+    (with [fs-proc (posix-spawn/spawn [(find-pkgfs-bin)
                                        "-f"
-                                       "-oauto_unmount,use_ino,kernel_cache"
-                                       (string/join union-paths ":")
+                                       "-oauto_unmount,kernel_cache"
+                                       ;union-paths
                                        mnt-dir])]
 
       # wait for fs to come up, can we improve from busy waiting?
@@ -275,9 +301,7 @@
     (build-pkg* pkg)))
 
 (defn venv
-  [out-path pkgs &keys {
-    :binds binds
-  }]
+  [out-path pkgs &keys {:binds binds}]
   (def out-path (path/abspath out-path))
 
   (default binds ["/bin" "/lib" "/usr"])
@@ -293,7 +317,7 @@
   (defer (:close gc-lock)
     (each pkg pkgs
       (build-pkg* pkg))
-    
+
     (def all-pkgs (recursive-pkg-dependencies pkgs))
     (def run-path (path/join out-path "run"))
 
@@ -308,9 +332,9 @@
 
     (def filtered-binds (filter |(os/stat (path/join out-path "fs" $)) binds))
 
-    (spit run-path 
-          (string 
-          ```
+    (spit run-path
+          (string
+            ```
           #! /bin/sh
           exec nsjail -Me -e -Q -t 0 -D "$PWD" --rw --chroot / \
             --skip_setsid \
@@ -329,8 +353,8 @@
             --disable_clone_newuts \
 
           ```
-          ;(map |(string "  -B " (shlex/quote (path/join out-path "fs" $)) ":" (shlex/quote $) "\\\n") filtered-binds)
-          ```
+            ;(map |(string "  -B " (shlex/quote (path/join out-path "fs" $)) ":" (shlex/quote $) "\\\n") filtered-binds)
+            ```
             -- "$@"
           ```))
     (os/execute ["chmod" "+x" run-path] :xp))

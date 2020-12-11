@@ -17,7 +17,7 @@
 
 (def seed-bb
   (h/pkg :name "seed-bb"
-         :build 
+         :build
          ```
          #! /bin/sh
          set -eux
@@ -254,7 +254,7 @@
   ~(def ,name
      (h/pkg :name ,(string name)
             :build
-            (string 
+            (string
               ```
               #! /bin/sh
               set -eux
@@ -272,11 +272,11 @@
             :make-depends ,make-depends
             :depends ,depends)))
 
-(defbase make 
+(defbase make
   :make-depends [gcc gcc-rt-lite make-static seed-bb make-src]
   :depends [gcc-rt-lite])
 
-(defbase coreutils 
+(defbase coreutils
   :make-depends [gcc gcc-rt-lite make-static seed-bb coreutils-src]
   :depends [gcc-rt-lite]
   :post-install `mkdir -p "$out/usr/bin"; ln -s /bin/env "$out/usr/bin/env"`)
@@ -401,10 +401,10 @@
     cd *
     ./config --prefix="/"
     make -j$(nproc)
-    make install-strip DESTDIR="$out"
+    make install DESTDIR="$out"
     ```))
 
 (h/init-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 (h/open-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 # (pp (h/build-pkg mcm-gcc))
-(h/venv "/tmp/my-venv" [perl])
+(h/venv "/tmp/my-venv" [openssl])
