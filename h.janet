@@ -153,27 +153,28 @@
         (os/chmod content-path perms))))
   nil)
 
+
+# XXX this does not check exec bit,
+# This should maybe be in the stdlib.
+# https://github.com/janet-lang/janet/issues/528
+(defn look-path 
+  [exe]
+  (def PATH (os/getenv "PATH"))
+  (when (or (nil? PATH) (empty? PATH))
+    (error "PATH not set"))
+  (var r nil)
+  (each p (string/split ":" (os/getenv "PATH" ""))
+    (def full-p (path/join p exe))
+    (when (os/stat full-p)
+      (set r full-p)
+      (break)))
+  (unless r
+    (errorf "%v not found in PATH" exe))
+  r)
+
 (var- pkgfs-bin nil)
 (defn- find-pkgfs-bin
   []
-
-  # XXX this does not check exec bit,
-  # This should maybe be in the stdlib.
-  # https://github.com/janet-lang/janet/issues/528
-
-  (defn look-path [exe]
-    (def PATH (os/getenv "PATH"))
-    (when (or (nil? PATH) (empty? PATH))
-      (error "PATH not set"))
-    (var r nil)
-    (each p (string/split ":" (os/getenv "PATH" ""))
-      (def full-p (path/join p exe))
-      (when (os/stat full-p)
-        (set r full-p)
-        (break)))
-    (unless r
-      (errorf "%v not found in PATH" exe))
-    r)
 
   (if pkgfs-bin
     pkgfs-bin
@@ -335,7 +336,9 @@
             ```
             #! /bin/sh
             set -e
+            
             unset venv_binds
+
             for b in $(ls /)
             do
 
@@ -345,9 +348,10 @@
               venv_binds+=(--bind "/$b" "/$b")
             done
 
-            exec bwrap \
+            exec \
 
             ```
+            "  " (shlex/quote (look-path "bwrap")) " \\\n"
             ;(map |(string "  --dev-bind-try " (shlex/quote (path/join out-path "fs" $)) " " (shlex/quote $) " \\\n") binds)
             ```
               "${venv_binds[@]}" \
