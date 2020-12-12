@@ -3,7 +3,6 @@
 (import flock)
 (import shlex)
 (import posix-spawn)
-(import sh)
 (import ./build/_h)
 
 (defn pkg
@@ -77,9 +76,14 @@
   (def sep (if (empty? name) "" "-"))
   (path/join *store-path* "pkg" (string name sep (pkg :hash))))
 
+
+(defn has-pkg-with-hash?
+  [h]
+  (not (empty? (sqlite3/eval *store-db* "select 1 from Pkgs where Hash=:hash" {:hash h}))))
+
 (defn has-pkg?
   [pkg]
-  (not (empty? (sqlite3/eval *store-db* "select 1 from Pkgs where Hash=:hash" {:hash (pkg :hash)}))))
+  (has-pkg-with-hash? (pkg :hash)))
 
 (defn- acquire-gc-lock
   [block mode]
@@ -208,27 +212,18 @@
     (def mnt-dir (path/join full-pkg-path "mnt"))
     (os/mkdir mnt-dir)
 
-    (def chroot (path/join full-pkg-path "build-chroot"))
-    (def chroot-tmp (path/join chroot "/tmp"))
-    (def chroot-bin (path/join chroot "/bin"))
-    (def chroot-etc (path/join chroot "/etc"))
-    (def chroot-var (path/join chroot "/var"))
-    (def chroot-out (path/join chroot "/out"))
-    (def chroot-proc (path/join chroot "/proc"))
-    (def chroot-dev (path/join chroot "/dev"))
-    (def chroot-build (path/join chroot "/build"))
-    (def chroot-paths [chroot chroot-bin chroot-etc chroot-var
-                       chroot-out chroot-build chroot-tmp chroot-proc chroot-dev])
+    (def build-dir (path/join full-pkg-path "build-dir"))
+    (os/mkdir build-dir)
 
-    (each p chroot-paths
-      (os/mkdir p))
+    (def build-files (path/join full-pkg-path "build-files"))
+    (os/mkdir build-files)
 
-    (def build-script (path/join chroot "builder"))
+    (def build-script (path/join build-files "builder"))
     (spit build-script (pkg :build))
     (os/chmod build-script 8r755)
 
     (def union-paths
-      (array/concat @[chroot]
+      (array/concat @[build-files] # ensure /builder can't be shadowed.
                     (map |(path/join (pkg-path $) "fs")
                          (recursive-pkg-dependencies (pkg :make-depends)))))
     (with [fs-proc (posix-spawn/spawn [(find-pkgfs-bin)
@@ -244,33 +239,37 @@
           (when (fs-proc :exit-code)
             (error "fuse filesystem exited during setup"))))
 
-      (os/execute
-        ["nsjail"
-         "-Mo"
-         "-q"
-         "-t" "0"
-         "-B" (string fs-dir ":/out")
-         "-B" "/dev"
-         "-m" "none:/build:tmpfs:size=10000000000"
-         "-m" "none:/tmp:tmpfs:size=10000000000"
-         "-E" "out=/out"
-         "-E" "PATH=/bin:/usr/bin:/usr/local/bin"
-         "-D" "/build"
-         "--chroot" mnt-dir
-         "--rlimit_as" "max"
-         "--rlimit_cpu" "max"
-         "--rlimit_fsize" "max"
-         "--rlimit_nofile" "max"
-         "--rlimit_nproc" "max"
-         "--rlimit_stack" "max"
-         "--" "/builder"]
-        :xp)
 
+      (def container-toplevels 
+        (filter |(not (or (= $ "dev")
+                          (= $ "proc")
+                          (= $ "tmp")
+                          (= $ "out")
+                          (= $ "build")))
+                (os/dir mnt-dir)))
+
+      (os/execute
+        ["bwrap"
+         ;(mapcat |["--bind" (path/join mnt-dir $) (string "/" $)] container-toplevels)
+         "--bind" build-dir "/build"
+         "--bind" fs-dir "/out"
+         "--dev" "/dev"
+         "--proc" "/proc"
+         "--tmpfs" "/tmp"
+         "--unshare-net"
+         "--chdir" "/build"
+         "--" "/builder"]
+        :xep
+        {"HOME" "/homeless"
+         "PATH" "/bin:/usr/bin:/usr/local/bin"
+         "out"  "/out"})
+ 
       (when (fs-proc :exit-code)
         (error "fuse filesystem exited during build")))
 
     (nuke-path mnt-dir)
-    (nuke-path chroot))
+    (nuke-path build-files)
+    (nuke-path build-dir))
   nil)
 
 (varfn build-pkg*
@@ -359,4 +358,25 @@
               -- "$@"
             ```))
     (os/execute ["chmod" "+x" run-path] :xp))
+  :ok)
+
+(defn cleanup-failed-packages
+  []
+  (unless *store-is-open*
+    (error "package store is not open, use 'open-pkg-store'"))
+
+  (def gc-lock (acquire-gc-lock :noblock :exclusive))
+
+  (unless gc-lock
+    (error "unable to acquire an exclusive package store lock"))
+
+  (defer (:close gc-lock)
+    (def pkgs-dir (path/join *store-path* "pkg"))
+    (def all-dirs (os/dir pkgs-dir))
+    (each d all-dirs
+      (def pkg-hash (last (string/split "-" d)))
+      (unless (has-pkg-with-hash? pkg-hash)
+        (def to-remove (path/join pkgs-dir d))
+        (eprintf "cleaning up %s..." to-remove)
+        (nuke-path to-remove))))
   :ok)

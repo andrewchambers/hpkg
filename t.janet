@@ -590,8 +590,8 @@
 (def rust
   (h/pkg
     :name "rust"
-    :make-depends [gcc-rt-heavy base-dev openssl cmake ninja python3 rust-bootstrap rust-src]
-    :depends []
+    :make-depends [gcc-rt-heavy base-dev openssl zlib cmake ninja python3 rust-bootstrap rust-src]
+    :depends [openssl zlib]
     :build
     ```
     #! /bin/sh
@@ -600,7 +600,6 @@
     cd *
 
     export RUST_BACKTRACE=1
-    export OPENSSL_STATIC=1
     cat <<EOF > config.toml
     [llvm]
 
@@ -653,7 +652,7 @@
     ```))
 
 
-(h/init-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
-(h/open-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
+ (h/init-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
+ (h/open-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 # (pp (h/build-pkg mcm-gcc))
-(h/venv "/tmp/my-venv" [rust])
+ (h/venv "/tmp/my-venv" [rust base-dev])
