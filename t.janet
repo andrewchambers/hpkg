@@ -29,13 +29,13 @@
          :make-depends [seed]))
 
 (defmacro defsrc
-  [name &keys {:url url :hash hash :path file-name}]
+  [name &keys {:url url :hash hash :file-name file-name}]
   ~(def ,name (,h/pkg
                  :name ,(string name)
                  :content
                  [{:url ,url
                    :hash ,hash
-                   :path ,(string "/src/" (last (string/split "/" url)))}])))
+                   :path ,(string "/src/" (or file-name (last (string/split "/" url))))}])))
 
 
 (defsrc make-src
@@ -244,6 +244,18 @@
     ```
     :make-depends [seed gcc]))
 
+(def gcc-rt-heavy
+  (h/pkg
+    :name "gcc-rt-heavy"
+    :build
+    ```
+    #!/bin/sh
+    set -eux
+    mkdir "$out/lib/"
+    cp -r /x86_64-linux-musl/lib/*.so* "$out/lib/"
+    ```
+    :make-depends [seed gcc]))
+
 (defmacro defbase
   [name &keys {:make-depends make-depends
                :depends depends
@@ -271,6 +283,10 @@
               ,post-install)
             :make-depends ,make-depends
             :depends ,depends)))
+
+(defbase make
+  :make-depends [gcc gcc-rt-lite make-static seed-bb make-src]
+  :depends [gcc-rt-lite])
 
 (defbase make
   :make-depends [gcc gcc-rt-lite make-static seed-bb make-src]
@@ -326,6 +342,11 @@
   :make-depends [gcc gcc-rt-lite make seed-bb xz-src]
   :depends [gcc-rt-lite])
 
+(defbase pkgconf
+  :make-depends [gcc gcc-rt-lite make seed-bb pkgconf-src]
+  :depends [gcc-rt-lite]
+  :post-install `ln -s /bin/pkgconf "$out/bin/pkg-config"`)
+
 (def base
   (h/pkg
     :name "base"
@@ -340,7 +361,7 @@
     # XXX It seems a builder should not be required.
     :build "#!/bin/dash"
     :make-depends [base]
-    :depends [base make gcc]))
+    :depends [base make pkgconf gcc]))
 
 (defsrc bash-src
   :url "https://ftp.gnu.org/gnu/bash/bash-5.0.tar.gz"
@@ -404,7 +425,235 @@
     make install DESTDIR="$out"
     ```))
 
+(defsrc zlib-src
+  :url
+  "https://www.zlib.net/zlib-1.2.11.tar.gz"
+  :hash
+  "sha256:c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1")
+
+(def zlib
+  (h/pkg
+    :name "zlib"
+    :make-depends [base-dev zlib-src]
+    :depends [gcc-rt-lite]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    ./configure --prefix=""
+    make -j$(nproc)
+    make install DESTDIR="$out"
+    ```))
+
+(defsrc libffi-src
+  :url
+  "https://github.com/libffi/libffi/releases/download/v3.3/libffi-3.3.tar.gz"
+  :hash
+  "sha256:72fba7922703ddfa7a028d513ac15a85c8d54c8d67f55fa5a4802885dc652056")
+
+(def libffi
+  (h/pkg
+    :name "libffi"
+    :make-depends [base-dev libffi-src]
+    :depends [gcc-rt-lite]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    ./configure --prefix=""
+    make -j$(nproc)
+    make install DESTDIR="$out"
+    ```))
+
+(defsrc python3-src
+  :url
+  "https://www.python.org/ftp/python/3.8.3/Python-3.8.3.tgz"
+  :hash
+  "sha256:6af6d4d2e010f9655518d0fc6738c7ff7069f10a4d2fbd55509e467f092a8b90")
+
+(def python3
+  (h/pkg
+    :name "python3"
+    :make-depends [base-dev zlib libffi openssl python3-src]
+    :depends [gcc-rt-lite zlib libffi openssl]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    ./configure --prefix="" --enable-optimizations
+    make -j$(nproc) install DESTDIR="$out"
+    ```))
+
+(defsrc cmake-src
+  :url
+  "https://github.com/Kitware/CMake/releases/download/v3.17.2/cmake-3.17.2.tar.gz"
+  :hash
+  "sha256:fc77324c4f820a09052a7785549b8035ff8d3461ded5bbd80d252ae7d1cd3aa5")
+
+(def cmake
+  (h/pkg
+    :name "cmake"
+    :make-depends [gcc-rt-heavy base-dev openssl cmake-src]
+    :depends [gcc-rt-heavy openssl]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    ./configure --prefix=""
+    make -j$(nproc) install DESTDIR="$out"
+    ```))
+
+(defsrc re2c-src
+  :url
+  "https://github.com/skvadrik/re2c/releases/download/1.3/re2c-1.3.tar.xz"
+  :hash
+  "sha256:f37f25ff760e90088e7d03d1232002c2c2672646d5844fdf8e0d51a5cd75a503")
+
+(def re2c
+  (h/pkg
+    :name "cmake"
+    :make-depends [base-dev re2c-src]
+    :depends [gcc-rt-lite]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    ./configure --prefix=""
+    make -j$(nproc) install-strip DESTDIR="$out"
+    ```))
+
+(defsrc ninja-src
+  :file-name
+  "ninja-1.10.0.tar.gz"
+  :url
+  "https://github.com/ninja-build/ninja/archive/v1.10.0.tar.gz"
+  :hash
+  "sha256:3810318b08489435f8efc19c05525e80a993af5a55baa0dfeae0465a9d45f99f")
+
+(def ninja
+  (h/pkg
+    :name "ninja"
+    :make-depends [gcc-rt-heavy cmake base-dev ninja-src]
+    :depends [gcc-rt-heavy]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    cmake -Bbuild-cmake -H.
+    cmake --build build-cmake --parallel $(nproc)
+    mkdir -p "$out/bin"
+    install -s build-cmake/ninja "$out/bin/ninja"
+    ```))
+
+(defsrc rust-bootstrap-src
+  :url
+  "https://static.rust-lang.org/dist/rust-1.45.2-x86_64-unknown-linux-musl.tar.gz"
+  :hash
+  "sha256:1518bc5255c248a62a58562368e0a54f61fe02fd50f97f68882a65a62b100c17")
+
+(def rust-bootstrap
+  (h/pkg
+    :name "rust-bootstrap"
+    :make-depends [gcc-rt-heavy base-dev rust-bootstrap-src]
+    :depends [gcc-rt-heavy]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    sh install.sh \
+          --disable-ldconfig \
+          --prefix="" \
+          --destdir="$out" \
+          --components="rustc,cargo,rust-std-x86_64-unknown-linux-musl"
+    ```))
+
+(defsrc rust-src
+  :url
+  "https://static.rust-lang.org/dist/rustc-1.45.2-src.tar.gz"
+  :hash
+  "sha256:b7a3fc1e3ee367260ef945da867da0957f8983705f011ba2a73715375e50e308")
+
+(def rust
+  (h/pkg
+    :name "rust"
+    :make-depends [gcc-rt-heavy base-dev openssl cmake ninja python3 rust-bootstrap rust-src]
+    :depends []
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+
+    export RUST_BACKTRACE=1
+    export OPENSSL_STATIC=1
+    cat <<EOF > config.toml
+    [llvm]
+
+    static-libstdcpp = true
+    ninja = true
+
+    [build]
+
+    build = "x86_64-unknown-linux-musl"
+    cargo = "/bin/cargo"
+    rustc = "/bin/rustc"
+    docs = false
+    submodules = false
+    extended = true
+    vendor = true
+    verbose = 2
+    print-step-timings = true
+
+    [install]
+
+    prefix = "/"
+    sysconfdir = "/etc"
+
+    [rust]
+
+    lld = false
+    default-linker = "gcc"
+    channel = "stable"
+    verbose-tests = true
+    codegen-backends = ["llvm"]
+
+    [target.x86_64-unknown-linux-musl]
+
+    cc = "gcc"
+    cxx = "g++"
+    ar = "ar"
+    ranlib = "ranlib"
+    linker = "gcc"
+    crt-static = false
+    musl-root = "/x86_64-linux-musl"
+
+    [dist]
+
+    EOF
+
+    export HOME=/tmp
+    export PYTHONHOME="/"
+    DESTDIR="$out" python3 x.py install
+
+    ```))
+
+
 (h/init-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 (h/open-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 # (pp (h/build-pkg mcm-gcc))
-(h/venv "/tmp/my-venv" [bash base])
+(h/venv "/tmp/my-venv" [rust])

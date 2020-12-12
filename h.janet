@@ -305,7 +305,7 @@
   [out-path pkgs &keys {:binds binds}]
   (def out-path (path/abspath out-path))
 
-  (default binds ["bin" "lib" "usr"])
+  (default binds ["bin" "lib" "libexec" "usr" "include" "share"])
 
   (unless *store-is-open*
     (error "package store is not open, use 'open-pkg-store'"))
