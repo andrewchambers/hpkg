@@ -327,7 +327,7 @@
 
     (os/mkdir out-path)
     (def all-fs-paths (map |(path/join (pkg-path $) "fs") all-pkgs))
-    (eprintf "copying files to venv...")
+    (eprintf "copying files to venv...%s" out-path)
     (os/execute ["rsync" "--delete" "-a" ;all-fs-paths out-path] :xp)
 
     (spit run-path
