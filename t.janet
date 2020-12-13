@@ -211,7 +211,7 @@
     LINUX_VER = 4.19.90
     OUTPUT = $out
     GCC_CONFIG += --disable-libquadmath --disable-decimal-float --disable-libitm --disable-fixed-point
-    COMMON_CONFIG += --enable-new-dtags
+    COMMON_CONFIG += --with-build-sysroot=/ --enable-new-dtags
     COMMON_CONFIG += CC="gcc -static --static"
     COMMON_CONFIG += CXX="g++ -static --static"
     COMMON_CONFIG += CFLAGS="-O3" CXXFLAGS="-O3" LDFLAGS="-s"
@@ -663,6 +663,7 @@
   (h/pkg
     :name "janet"
     :make-depends [base-dev janet-src]
+    :depends [gcc-rt-lite]
     :build
     ```
     #! /bin/sh
@@ -674,8 +675,48 @@
     make install DESTDIR="$out"
     ```))
 
+(defsrc libcap-src
+  :url
+  "https://kernel.org/pub/linux/libs/security/linux-privs/libcap2/libcap-2.46.tar.xz"
+  :hash
+  "sha256:4ed3d11413fa6c9667e49f819808fbb581cd8864b839f87d7c2a02c70f21d8b4")
+
+
+(def libcap
+  (h/pkg
+    :name "libcap"
+    :make-depends [base-dev perl libcap-src]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    make lib=lib prefix=/ RAISE_SETFCAP=no DESTDIR="$out" install
+    ```))
+
+(defsrc bubblewrap-src
+  :url
+  "https://github.com/containers/bubblewrap/releases/download/v0.4.1/bubblewrap-0.4.1.tar.xz"
+  :hash
+  "sha256:b9c69b9b1c61a608f34325c8e1a495229bacf6e4a07cbb0c80cf7a814d7ccc03")
+
+# XXX why is the -I and -L needed?
+(def bubblewrap
+  (h/pkg
+    :name "bubblewrap"
+    :make-depends [base-dev libcap bubblewrap-src]
+    :build
+    ```
+    #! /bin/sh
+    set -eux
+    tar xf /src/*
+    cd *
+    export CFLAGS="-I/include -L/lib -O2 --static"
+    ./configure --prefix=""
+    make install-strip -j$(nproc) DESTDIR="$out"
+    ```))
 
  (h/init-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
  (h/open-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
-# (pp (h/build-pkg mcm-gcc))
- (h/venv "/tmp/my-venv" [janet])
+ (h/venv "/tmp/my-venv" [bubblewrap])

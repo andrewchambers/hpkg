@@ -27,7 +27,7 @@ static void hasher_add(Hasher *h, char *b, size_t n) {
 }
 
 static int hasher_add_file(Hasher *h, FILE *f) {
-  char buf[4096];
+  char buf[65536];
   while (1) {
     int n = fread(buf, 1, sizeof(buf), f);
     if (n > 0) {
