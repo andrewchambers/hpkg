@@ -13,10 +13,11 @@
   (defn- hash
     [algo path]
     (string algo ":"
-            (match algo
+            (case algo
               "sha256"
-              (_h/sha256-file-hash path)
-              _
+              (_h/file-hash :sha256 path)
+              "blake3"
+              (_h/file-hash :blake3 path)
               (error (string "unsupported hash algorithm - " algo)))))
 
   (def algo

@@ -14,7 +14,7 @@ typedef struct Pkg {
 extern const JanetAbstractType pkg_type;
 
 /* hash.c */
-Janet sha256_file_hash(int argc, Janet *argv);
+Janet file_hash(int argc, Janet *argv);
 
 /* util.c */
 void base16_encode(char *outbuf, char *inbuf, size_t in_length);

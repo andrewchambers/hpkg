@@ -7,9 +7,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "fts.h"
+#include "blake3.h"
 #include "h.h"
-#include "sha256.h"
 
 static void validate_pkg(Pkg *pkg) {
 
@@ -97,11 +96,11 @@ static void validate_pkg(Pkg *pkg) {
 #undef CHECK_PKG_TUPLE
 }
 
-static void hash_opt_string(Sha256ctx *hash_ctx, Janet v) {
+static void hash_opt_string(blake3_hasher *hash_ctx, Janet v) {
   switch (janet_type(v)) {
   case JANET_NIL: {
     uint8_t t = 0;
-    sha256_update(hash_ctx, &t, 1);
+    blake3_hasher_update(hash_ctx, &t, 1);
     break;
   }
   case JANET_STRING: {
@@ -113,8 +112,8 @@ static void hash_opt_string(Sha256ctx *hash_ctx, Janet v) {
     buf[2] = (n & 0xff00) >> 8;
     buf[3] = (n & 0xff0000) >> 16;
     buf[4] = (n & 0xff000000) >> 24;
-    sha256_update(hash_ctx, buf, sizeof(buf));
-    sha256_update(hash_ctx, (uint8_t *)s, n);
+    blake3_hasher_update(hash_ctx, buf, sizeof(buf));
+    blake3_hasher_update(hash_ctx, (uint8_t *)s, n);
     break;
   }
   default:
@@ -122,7 +121,7 @@ static void hash_opt_string(Sha256ctx *hash_ctx, Janet v) {
   }
 }
 
-static void hash_pkg_tuple(Sha256ctx *hash_ctx, Janet v) {
+static void hash_pkg_tuple(blake3_hasher *hash_ctx, Janet v) {
   const Janet *tup = janet_unwrap_tuple(v);
   uint32_t n = (uint32_t)janet_tuple_length(tup);
   // hash tuple marker and size
@@ -132,7 +131,7 @@ static void hash_pkg_tuple(Sha256ctx *hash_ctx, Janet v) {
   buf[2] = (n & 0xff00) >> 8;
   buf[3] = (n & 0xff0000) >> 16;
   buf[4] = (n & 0xff000000) >> 24;
-  sha256_update(hash_ctx, buf, sizeof(buf));
+  blake3_hasher_update(hash_ctx, buf, sizeof(buf));
   for (uint32_t i = 0; i < n; i++) {
     Pkg *p = janet_unwrap_abstract(tup[i]);
     hash_opt_string(hash_ctx, p->name);
@@ -140,7 +139,7 @@ static void hash_pkg_tuple(Sha256ctx *hash_ctx, Janet v) {
   }
 }
 
-static void hash_pkg_content(Sha256ctx *hash_ctx, Janet v) {
+static void hash_pkg_content(blake3_hasher *hash_ctx, Janet v) {
   if (janet_checktype(v, JANET_TUPLE)) {
     const Janet *tup = janet_unwrap_tuple(v);
     uint32_t n = (uint32_t)janet_tuple_length(tup);
@@ -151,7 +150,7 @@ static void hash_pkg_content(Sha256ctx *hash_ctx, Janet v) {
     buf[2] = (n & 0xff00) >> 8;
     buf[3] = (n & 0xff0000) >> 16;
     buf[4] = (n & 0xff000000) >> 24;
-    sha256_update(hash_ctx, buf, sizeof(buf));
+    blake3_hasher_update(hash_ctx, buf, sizeof(buf));
     for (uint32_t i = 0; i < n; i++) {
       const JanetKV *c = janet_unwrap_struct(tup[i]);
       // The urls of source code have no affect on the package hash.
@@ -164,22 +163,22 @@ static void hash_pkg_content(Sha256ctx *hash_ctx, Janet v) {
     }
   } else {
     uint8_t t = 0;
-    sha256_update(hash_ctx, &t, 1);
+    blake3_hasher_update(hash_ctx, &t, 1);
   }
 }
 
 static Janet compute_pkg_hash(Pkg *pkg) {
   Janet hash;
-  Sha256ctx hash_ctx;
-  uint8_t hash_bytes[32];
-  uint8_t hash_hex_bytes[64];
-  sha256_init(&hash_ctx);
+  blake3_hasher hash_ctx;
+  uint8_t hash_bytes[BLAKE3_OUT_LEN];
+  uint8_t hash_hex_bytes[sizeof(hash_bytes) * 2];
+  blake3_hasher_init(&hash_ctx);
   hash_opt_string(&hash_ctx, pkg->name);
   hash_opt_string(&hash_ctx, pkg->build);
   hash_pkg_content(&hash_ctx, pkg->content);
   hash_pkg_tuple(&hash_ctx, pkg->make_depends);
   hash_pkg_tuple(&hash_ctx, pkg->depends);
-  sha256_finish(&hash_ctx, &hash_bytes[0]);
+  blake3_hasher_finalize(&hash_ctx, hash_bytes, BLAKE3_OUT_LEN);
   base16_encode((char *)hash_hex_bytes, (char *)hash_bytes, sizeof(hash_bytes));
   hash = janet_stringv(hash_hex_bytes, sizeof(hash_hex_bytes));
   pkg->hash = hash;
@@ -268,9 +267,8 @@ const JanetAbstractType pkg_type = {
     pkg_unmarshal, NULL, NULL,       NULL,    NULL, NULL,
 };
 
-static const JanetReg cfuns[] = {{"pkg", pkg, NULL},
-                                 {"sha256-file-hash", sha256_file_hash, NULL},
-                                 {NULL, NULL, NULL}};
+static const JanetReg cfuns[] = {
+    {"pkg", pkg, NULL}, {"file-hash", file_hash, NULL}, {NULL, NULL, NULL}};
 
 JANET_MODULE_ENTRY(JanetTable *env) {
   janet_register_abstract_type(&pkg_type);
