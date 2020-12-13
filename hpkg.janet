@@ -1,3 +1,4 @@
+(import uri)
 (import path)
 (import sqlite3)
 (import flock)
@@ -5,17 +6,6 @@
 (import posix-spawn)
 (import ./fsutil)
 (import ./build/_hpkg)
-
-(defn pkg
-  [&keys {:name name
-          :build build
-          :content content
-          :make-depends make-depends
-          :depends depends}]
-  (default name "")
-  (default make-depends [])
-  (default depends [])
-  (_hpkg/pkg name build content make-depends depends))
 
 (defn recursive-pkg-dependencies [pkgs]
   (def deps @{})
@@ -120,32 +110,12 @@
         (os/chmod content-path perms))))
   nil)
 
-
-# XXX this does not check exec bit,
-# This should maybe be in the stdlib.
-# https://github.com/janet-lang/janet/issues/528
-(defn look-path 
-  [exe]
-  (def PATH (os/getenv "PATH"))
-  (when (or (nil? PATH) (empty? PATH))
-    (error "PATH not set"))
-  (var r nil)
-  (each p (string/split ":" (os/getenv "PATH" ""))
-    (def full-p (path/join p exe))
-    (when (os/stat full-p)
-      (set r full-p)
-      (break)))
-  (unless r
-    (errorf "%v not found in PATH" exe))
-  r)
-
 (var- pkgfs-bin nil)
 (defn- find-pkgfs-bin
   []
-
   (if pkgfs-bin
     pkgfs-bin
-    (set pkgfs-bin (look-path "pkgfs"))))
+    (set pkgfs-bin (fsutil/bin-search "pkgfs"))))
 
 (defn- build-pkg-from-build-script
   [pkg]
@@ -313,7 +283,7 @@
             exec \
 
             ```
-            "  " (shlex/quote (look-path "bwrap")) " \\\n"
+            "  " (shlex/quote (fsutil/bin-search "bwrap")) " \\\n"
             ;(map |(string "  --dev-bind-try " (shlex/quote (path/join out-path "fs" $)) " " (shlex/quote $) " \\\n") binds)
             ```
               "${venv_binds[@]}" \
@@ -343,3 +313,60 @@
         (eprintf "cleaning up %s..." to-remove)
         (fsutil/nuke-path to-remove))))
   :ok)
+
+# Functions and macros for use by package definitions.
+
+(defn pkg
+  [&keys {:name name
+          :build build
+          :content content
+          :make-depends make-depends
+          :depends depends}]
+  (default name "")
+  (default make-depends [])
+  (default depends [])
+  (_hpkg/pkg name build content make-depends depends))
+
+
+# Module loader for url imports of packages
+
+(defn- load-mod-from-url
+  [url args]
+  # XXX we want some sort of deno like cache.
+  (with [out (file/temp)]
+    (def result (os/execute ["curl" "-L" "-f" "-s" url] :p {:out out}))
+    (unless (zero? result) # XXX better error messages...
+      (errorf "module import of %v failed, curl error: %s\n" url))
+    (file/seek out :set 0)
+    (put module/loading url true)
+    (defer (put module/loading url nil)
+      (dofile out ;args))))
+
+(defn- relative-import-path?
+  [path]
+  (or (string/has-prefix? "./" path)
+      (string/has-prefix? "../" path)))
+
+(defn- check-mod-url-import
+  [path]
+  (if-let [parsed-url (uri/parse path)
+           url-scheme (parsed-url :scheme)
+           url-host (parsed-url :host)
+           url-path (parsed-url :path)]
+    (string url-scheme "://" url-host url-path ".janet")
+    (if-let [is-relpath (relative-import-path? path)
+             current-url (dyn :source)
+             source-is-string (string? current-url) # Possible :source is a file.
+             parsed-url (uri/parse current-url)
+             url-scheme (parsed-url :scheme)
+             url-host (parsed-url :host)
+             url-path (parsed-url :path)]
+      (do
+        (def url-path-dir (string/slice url-path 0 (- -2 (length (path/basename url-path)))))
+        (def abs-path (path/posix/join url-path-dir path))
+        (string url-scheme "://" url-host "/" abs-path ".janet")))))
+
+(defn install-url-module-loader
+  []
+  (put module/loaders :url load-mod-from-url)
+  (array/insert module/paths 0 [check-mod-url-import :url]))

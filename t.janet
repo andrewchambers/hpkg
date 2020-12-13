@@ -717,6 +717,6 @@
     make install-strip -j$(nproc) DESTDIR="$out"
     ```))
 
- (h/init-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
- (h/open-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
+ (h/init-pkg-store (string (os/getenv "HOME") "/src/hpkg/test-store"))
+ (h/open-pkg-store (string (os/getenv "HOME") "/src/hpkg/test-store"))
  (h/venv "/tmp/my-venv" [bubblewrap])

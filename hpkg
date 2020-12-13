@@ -1,0 +1,17 @@
+#! /usr/bin/env janet
+
+(import hpkg)
+
+(def repl-env
+  (let [env @{}]
+    (table/setproto env root-env)
+    (def hpkg-mod (require "hpkg"))
+    (each k (filter symbol? (keys hpkg-mod))
+      (def v (in hpkg-mod k))
+      (unless (in v :private)
+        (put env (symbol "hpkg/" k) (in hpkg-mod k))))
+    env))
+
+(defn main [&]
+  (hpkg/install-url-module-loader)
+  (repl nil nil repl-env nil nil))
