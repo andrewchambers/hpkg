@@ -5,12 +5,14 @@ typedef struct Pkg {
   Janet build;        // nil string
   Janet make_depends; // [Pkg]
   Janet depends;      // [Pkg]
-  Janet content;      // [{:path :url :hash}] content struct.
+  Janet content;      // [{:path :url :hash}].
 
   // Computed values
   Janet hash;
 } Pkg;
 
+/* pkg.c */
+Janet make_pkg(int argc, Janet *argv);
 extern const JanetAbstractType pkg_type;
 
 /* hash.c */

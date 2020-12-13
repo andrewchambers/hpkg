@@ -4,7 +4,7 @@
 (import shlex)
 (import posix-spawn)
 (import ./fsutil)
-(import ./build/_h)
+(import ./build/_hpkg)
 
 (defn pkg
   [&keys {:name name
@@ -15,7 +15,7 @@
   (default name "")
   (default make-depends [])
   (default depends [])
-  (_h/pkg name build content make-depends depends))
+  (_hpkg/pkg name build content make-depends depends))
 
 (defn recursive-pkg-dependencies [pkgs]
   (def deps @{})

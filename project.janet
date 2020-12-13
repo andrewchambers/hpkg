@@ -1,5 +1,5 @@
 (declare-project
-  :name "h"
+  :name "hpkg"
   :author "Andrew Chambers"
   :url "https://github.com/andrewchambers/h"
   :repo "git+https://github.com/andrewchambers/h.git"
@@ -9,7 +9,7 @@
                  "https://github.com/andrewchambers/janet-flock.git"])
 
 (declare-native
-  :name "_h"
+  :name "_hpkg"
   :cflags
   ["-Isha256/"
    "-Iblake3/"
@@ -20,7 +20,8 @@
    "-DBLAKE3_NO_AVX512"
    "-O3"]
   :source
-  ["h.c"
+  ["mod.c"
+   "pkg.c"
    "hash.c"
    "util.c"
    "sha256/sha256.c"

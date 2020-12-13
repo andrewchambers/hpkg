@@ -7,8 +7,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "hpkg.h"
 #include "blake3.h"
-#include "h.h"
 
 static void validate_pkg(Pkg *pkg) {
 
@@ -185,7 +185,7 @@ static Janet compute_pkg_hash(Pkg *pkg) {
   return janet_wrap_nil();
 }
 
-static Janet pkg(int argc, Janet *argv) {
+Janet make_pkg(int argc, Janet *argv) {
   janet_fixarity(argc, 5);
 
   Pkg *pkg = janet_abstract(&pkg_type, sizeof(Pkg));
@@ -267,13 +267,3 @@ const JanetAbstractType pkg_type = {
     pkg_unmarshal, NULL, NULL,       NULL,    NULL, NULL,
 };
 
-static const JanetReg cfuns[] = {
-    {"pkg", pkg, NULL}, {"file-hash", file_hash, NULL}, {NULL, NULL, NULL}};
-
-JANET_MODULE_ENTRY(JanetTable *env) {
-  janet_register_abstract_type(&pkg_type);
-  janet_cfuns(env, "h", cfuns);
-
-#define DEF_CONSTANT_INT(X) janet_def(env, #X, janet_wrap_integer(X), NULL)
-#undef DEF_CONSTANT_INT
-}

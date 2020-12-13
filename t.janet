@@ -1,4 +1,4 @@
-(import ./h)
+(import ./hpkg :as h)
 
 (def bootstrap
   (h/pkg :name "bootstrap"

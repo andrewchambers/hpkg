@@ -1,4 +1,4 @@
-(import ./build/_h)
+(import ./build/_hpkg)
 
 (defn nuke-path
   [p]
@@ -15,9 +15,9 @@
     (string algo ":"
             (case algo
               "sha256"
-              (_h/file-hash :sha256 path)
+              (_hpkg/file-hash :sha256 path)
               "blake3"
-              (_h/file-hash :blake3 path)
+              (_hpkg/file-hash :blake3 path)
               (error (string "unsupported hash algorithm - " algo)))))
 
   (def algo

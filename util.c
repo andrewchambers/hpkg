@@ -1,4 +1,4 @@
-#include "h.h"
+#include "hpkg.h"
 
 void base16_encode(char *outbuf, char *inbuf, size_t in_length) {
   const char *chartab = "0123456789abcdef";
