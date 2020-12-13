@@ -669,12 +669,13 @@
     set -eux
     tar xf /src/*
     cd *
-    PREFIX=/usr make
-    PREFIX=/usr make install DESTDIR="$out"
+    export PREFIX=/
+    make -j$(nproc)
+    make install DESTDIR="$out"
     ```))
 
 
  (h/init-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
  (h/open-pkg-store (string (os/getenv "HOME") "/src/h/test-store"))
 # (pp (h/build-pkg mcm-gcc))
- (h/venv "/tmp/my-venv" [janet base-dev])
+ (h/venv "/tmp/my-venv" [janet])

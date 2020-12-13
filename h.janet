@@ -3,6 +3,7 @@
 (import flock)
 (import shlex)
 (import posix-spawn)
+(import ./fsutil)
 (import ./build/_h)
 
 (defn pkg
@@ -93,44 +94,6 @@
   [pkg block mode]
   (flock/acquire (path/join *store-path* "lock" (string (pkg :hash) ".lock")) block mode))
 
-(defn- nuke-path
-  [p]
-  (when (os/stat p)
-    (os/execute ["chmod" "-R" "+w" p] :xp)
-    (os/execute ["rm" "-rf" p] :xp))
-  nil)
-
-(defn- check-path-hash
-  [path expected]
-
-  (defn- hash
-    [algo path]
-    (string algo ":"
-            (match algo
-              "sha256"
-              (_h/sha256-file-hash path)
-              _
-              (error (string "unsupported hash algorithm - " algo)))))
-
-  (def algo
-    (if-let [idx (string/find ":" expected)]
-      (string/slice expected 0 idx)
-      (error (string/format "expected ALGO:VALUE, got %v" expected))))
-  (def actual
-    (hash algo path))
-  (if (= expected actual)
-    :ok
-    [:fail actual]))
-
-(defn- assert-path-hash
-  [path expected]
-  (match (check-path-hash path expected)
-    :ok
-    nil
-    [:fail actual]
-    (error
-      (string/format "hash check failed!\npath: %s\nexpected: %v\ngot: %v" path expected actual))))
-
 (var build-pkg* nil)
 
 (defn- build-pkg-from-content-spec
@@ -142,7 +105,7 @@
     (errorf "package %s is already being built" (pkg-path pkg)))
 
   (defer (:close build-lock)
-    (nuke-path full-pkg-path)
+    (fsutil/nuke-path full-pkg-path)
     (os/mkdir full-pkg-path)
     (os/mkdir (path/join full-pkg-path "fs"))
 
@@ -152,7 +115,7 @@
       (eprintf "downloading %s to %s" (content-spec :url) content-path)
       (os/execute ["mkdir" "-p" (path/dirname content-path)] :xp)
       (os/execute ["curl" "-L" "-o" content-path (content-spec :url)] :xp)
-      (assert-path-hash content-path (content-spec :hash))
+      (fsutil/assert-path-hash content-path (content-spec :hash))
       (when-let [perms (content-spec :perms)]
         (os/chmod content-path perms))))
   nil)
@@ -202,7 +165,7 @@
 
     (eprintf "preparing build env for %s ..." (pkg-path pkg))
 
-    (nuke-path full-pkg-path)
+    (fsutil/nuke-path full-pkg-path)
 
     (os/mkdir full-pkg-path)
 
@@ -267,9 +230,9 @@
       (when (fs-proc :exit-code)
         (error "fuse filesystem exited during build")))
 
-    (nuke-path mnt-dir)
-    (nuke-path build-files)
-    (nuke-path build-dir))
+    (fsutil/nuke-path mnt-dir)
+    (fsutil/nuke-path build-files)
+    (fsutil/nuke-path build-dir))
   nil)
 
 (varfn build-pkg*
@@ -327,7 +290,7 @@
 
     (os/mkdir out-path)
     (def all-fs-paths (map |(path/join (pkg-path $) "fs") all-pkgs))
-    (eprintf "copying files to venv...%s" out-path)
+    (eprintf "copying packages to %v..." out-path)
     (os/execute ["rsync" "--delete" "-a" ;all-fs-paths out-path] :xp)
 
     (spit run-path
@@ -378,5 +341,5 @@
       (unless (has-pkg-with-hash? pkg-hash)
         (def to-remove (path/join pkgs-dir d))
         (eprintf "cleaning up %s..." to-remove)
-        (nuke-path to-remove))))
+        (fsutil/nuke-path to-remove))))
   :ok)
