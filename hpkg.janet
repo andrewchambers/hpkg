@@ -7,6 +7,21 @@
 (import _hpkg)
 (import ./fsutil)
 
+(defn pkg-walk [pkgs f]
+  (def walked @{})
+  (defn pkg-walk
+    [pkg]
+    (unless (in walked pkg)
+      (put walked pkg true)
+      (f pkg)
+      (each dep (pkg :depends)
+        (pkg-walk dep))
+      (each dep (pkg :make-depends)
+        (pkg-walk dep))))
+  (each pkg pkgs
+    (pkg-walk pkg))
+  nil)
+
 (defn recursive-pkg-dependencies [pkgs]
   (def deps @{})
   (def ordered-deps @[])
@@ -23,6 +38,12 @@
     (recursive-pkg-dependencies pkg))
 
   ordered-deps)
+
+(defn pkgs-with-external-content
+  [& pkgs]
+  (def content-pkgs @[])
+  (pkg-walk pkgs |(when (in $ :content) (array/push content-pkgs $)))
+  content-pkgs)
 
 (defn pkg-store-path-from-env
   []
@@ -48,9 +69,9 @@
       (sqlite3/eval db "commit;")))
   :ok)
 
-(var- *store-is-open* false)
-(var- *store-path* nil)
-(var- *store-db* nil)
+(var *store-is-open* false)
+(var *store-path* nil)
+(var *store-db* nil)
 
 (defn open-pkg-store
   [&opt pkg-store-path]
@@ -78,7 +99,6 @@
   (def name (pkg :name))
   (def sep (if (empty? name) "" "-"))
   (path/join *store-path* "pkg" (string name sep (pkg :hash))))
-
 
 (defn has-pkg-with-hash?
   [h]
@@ -116,6 +136,8 @@
         (path/join full-pkg-path "fs" (path/normalize (content-spec :path))))
       (eprintf "downloading %s to %s" (content-spec :url) content-path)
       (os/execute ["mkdir" "-p" (path/dirname content-path)] :xp)
+      (when (os/lstat content-path)
+        (errorf "%v already exists" content-path))
       (os/execute ["curl" "-L" "-o" content-path (content-spec :url)] :xp)
       (fsutil/assert-path-hash content-path (content-spec :hash))
       (when-let [perms (content-spec :perms)]

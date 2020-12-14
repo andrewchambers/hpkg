@@ -28,7 +28,6 @@
          ```
             :make-depends [seed]))
 
-
 (defsrc make-src
   :url
   "https://ftp.gnu.org/gnu/make/make-4.2.tar.gz"
@@ -219,7 +218,6 @@
     done
     ```
     :make-depends [patch-static make-static seed gcc-src]))
-
 
 # XXX can we strip?
 (def gcc-rt-lite

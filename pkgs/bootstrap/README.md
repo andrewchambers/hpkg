@@ -8,5 +8,5 @@ Steps for bootstrapping:
 
 - Build seed.tar.gz with seed.sh, this builds a statically linked gcc and busybox.
 - Build a statically linked bootstrap.c, linked against libarchive.
-- Host both files somewhere hpkg can download them, in your bootstrap building
+- Host both files somewhere hpkg can download them, in your bootstrap package
   execute the bootstrap binary, and it will unpack the seed into $out.
