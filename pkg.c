@@ -7,8 +7,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "hpkg.h"
 #include "blake3.h"
+#include "hpkg.h"
 
 static void validate_pkg(Pkg *pkg) {
 
@@ -263,7 +263,6 @@ static void *pkg_unmarshal(JanetMarshalContext *ctx) {
 }
 
 const JanetAbstractType pkg_type = {
-    "h/pkg",       NULL, pkg_gcmark, pkg_get, NULL, pkg_marshal,
+    "hpkg/pkg",    NULL, pkg_gcmark, pkg_get, NULL, pkg_marshal,
     pkg_unmarshal, NULL, NULL,       NULL,    NULL, NULL,
 };
-

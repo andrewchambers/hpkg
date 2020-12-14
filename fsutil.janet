@@ -1,4 +1,4 @@
-(import ./build/_hpkg)
+(import _hpkg)
 (import path)
 
 (defn nuke-path
@@ -8,7 +8,12 @@
     (os/execute ["rm" "-rf" p] :xp))
   nil)
 
-(defn bin-search
+(defn ensure-dir-exists
+  [d]
+  (unless (os/stat d)
+    (os/mkdir d)))
+
+(defn find-bin
   [exe]
   (def PATH (os/getenv "PATH"))
   (when (or (nil? PATH) (empty? PATH))

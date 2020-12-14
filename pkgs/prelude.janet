@@ -1,4 +1,5 @@
 (import hpkg)
+(import ./lib/path :export true)
 
 (defmacro local-file
   [fpath]

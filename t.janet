@@ -511,27 +511,6 @@
     make -j$(nproc) install DESTDIR="$out"
     ```))
 
-(defsrc re2c-src
-  :url
-  "https://github.com/skvadrik/re2c/releases/download/1.3/re2c-1.3.tar.xz"
-  :hash
-  "sha256:f37f25ff760e90088e7d03d1232002c2c2672646d5844fdf8e0d51a5cd75a503")
-
-(def re2c
-  (h/pkg
-    :name "cmake"
-    :make-depends [base-dev re2c-src]
-    :depends [gcc-rt-lite]
-    :build
-    ```
-    #! /bin/sh
-    set -eux
-    tar xf /src/*
-    cd *
-    ./configure --prefix=""
-    make -j$(nproc) install-strip DESTDIR="$out"
-    ```))
-
 (defsrc ninja-src
   :file-name
   "ninja-1.10.0.tar.gz"

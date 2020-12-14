@@ -4,8 +4,8 @@
 (import flock)
 (import shlex)
 (import posix-spawn)
+(import _hpkg)
 (import ./fsutil)
-(import ./build/_hpkg)
 
 (defn recursive-pkg-dependencies [pkgs]
   (def deps @{})
@@ -24,18 +24,21 @@
 
   ordered-deps)
 
+(defn pkg-store-path-from-env
+  []
+  (or (os/getenv "HPKG_STORE")
+      (error "HPKG_STORE environment variable not set")))
+
 (defn init-pkg-store
-  [p]
-  (defn ensure-dir-exists
-    [d]
-    (unless (os/stat d)
-      (os/mkdir d)))
+  [&opt pkg-store-path]
 
-  (ensure-dir-exists p)
-  (ensure-dir-exists (path/join p "pkg"))
-  (ensure-dir-exists (path/join p "lock"))
+  (default pkg-store-path (pkg-store-path-from-env))
 
-  (with [db (sqlite3/open (path/join p "hermes.db"))]
+  (fsutil/ensure-dir-exists pkg-store-path)
+  (fsutil/ensure-dir-exists (path/join pkg-store-path "pkg"))
+  (fsutil/ensure-dir-exists (path/join pkg-store-path "lock"))
+
+  (with [db (sqlite3/open (path/join pkg-store-path "hermes.db"))]
     (sqlite3/eval db "begin immediate;")
     (when (empty? (sqlite3/eval db "select name from sqlite_master where type='table' and name='Meta'"))
       (sqlite3/eval db "create table Roots(LinkPath text primary key);")
@@ -50,7 +53,10 @@
 (var- *store-db* nil)
 
 (defn open-pkg-store
-  [pkg-store-path]
+  [&opt pkg-store-path]
+  
+  (default pkg-store-path (pkg-store-path-from-env))
+
   (def pkg-store-path (path/abspath pkg-store-path))
   (def db-path (path/join pkg-store-path "hermes.db"))
   (unless (os/stat db-path)
@@ -60,6 +66,12 @@
   (set *store-path* pkg-store-path)
   (set *store-db* db)
   :ok)
+
+(defn ensure-pkg-store-open
+  []
+  (unless *store-is-open*
+    (open-pkg-store))
+  nil)
 
 (defn pkg-path
   [pkg]
@@ -84,7 +96,7 @@
   [pkg block mode]
   (flock/acquire (path/join *store-path* "lock" (string (pkg :hash) ".lock")) block mode))
 
-(var build-pkg* nil)
+(var- build-pkg* nil)
 
 (defn- build-pkg-from-content-spec
   [pkg]
@@ -115,7 +127,7 @@
   []
   (if pkgfs-bin
     pkgfs-bin
-    (set pkgfs-bin (fsutil/bin-search "pkgfs"))))
+    (set pkgfs-bin (fsutil/find-bin "pkgfs"))))
 
 (defn- build-pkg-from-build-script
   [pkg]
@@ -220,10 +232,9 @@
                   {:hash (pkg :hash) :name (pkg :name)}))
   full-pkg-path)
 
-(defn build-pkg
+(defn build
   [pkg]
-  (unless *store-is-open*
-    (error "package store is not open, use 'open-pkg-store'"))
+  (ensure-pkg-store-open)
 
   (def gc-lock (acquire-gc-lock :noblock :shared))
 
@@ -233,14 +244,13 @@
   (defer (:close gc-lock)
     (build-pkg* pkg)))
 
-(defn venv
+(defn export-venv
   [out-path pkgs &keys {:binds binds}]
   (def out-path (path/abspath out-path))
 
   (default binds ["bin" "lib" "libexec" "usr" "include" "share"])
 
-  (unless *store-is-open*
-    (error "package store is not open, use 'open-pkg-store'"))
+  (ensure-pkg-store-open)
 
   (def gc-lock (acquire-gc-lock :noblock :shared))
 
@@ -271,7 +281,10 @@
             
             unset venv_binds
 
-            for b in $(ls /)
+            for b in 
+            ```
+            "$(" (fsutil/find-bin "ls") " /)\n"
+            ```
             do
 
             ```
@@ -283,7 +296,7 @@
             exec \
 
             ```
-            "  " (shlex/quote (fsutil/bin-search "bwrap")) " \\\n"
+            "  " (shlex/quote (fsutil/find-bin "bwrap")) " \\\n"
             ;(map |(string "  --dev-bind-try " (shlex/quote (path/join out-path "fs" $)) " " (shlex/quote $) " \\\n") binds)
             ```
               "${venv_binds[@]}" \
@@ -295,8 +308,7 @@
 
 (defn cleanup-failed-packages
   []
-  (unless *store-is-open*
-    (error "package store is not open, use 'open-pkg-store'"))
+  (ensure-pkg-store-open)
 
   (def gc-lock (acquire-gc-lock :noblock :exclusive))
 
@@ -326,7 +338,6 @@
   (default make-depends [])
   (default depends [])
   (_hpkg/pkg name build content make-depends depends))
-
 
 # Module loader for url imports of packages
 

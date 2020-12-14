@@ -1,10 +1,12 @@
 #! /usr/bin/env janet
 
 (import hpkg)
+(import path)
+(import uri)
+(import argparse)
 
-(def repl-env
-  (let [env @{}]
-    (table/setproto env root-env)
+(def hpkg-env
+  (let [env (make-env)]
     (def hpkg-mod (require "hpkg"))
     (each k (filter symbol? (keys hpkg-mod))
       (def v (in hpkg-mod k))
@@ -12,6 +14,91 @@
         (put env (symbol "hpkg/" k) (in hpkg-mod k))))
     env))
 
-(defn main [&]
+(def- build-params
+  ["Build packages."
+   :default
+   {:kind :option}
+   "expression"
+   {:kind :option
+    :short "e"
+    :help "Expression to build, defaults to the module name."}])
+
+(defn- default-expression-from-module
+  [mod]
+  (def basename (last (string/split "/" mod)))
+  (def basename-parts (string/split "." basename))
+  (if (= 1 (length basename-parts))
+    basename
+    (string/slice basename 0 (- -2 (length (last basename-parts))))))
+
+(defn- load-expr
+  [expr &opt module-path]
+  
+  (def pkg-env (make-env))
+
+  (when module-path
+    (def module-path
+      (if (string/has-suffix? ".janet" module-path)
+        (string/slice module-path 0 -7)
+        module-path))
+    # Convert to absolute so we don't have to worry
+    # about where our current path is relative to.
+    (def module-path
+      (if-let [parsed-url (uri/parse module-path)
+               url-scheme (parsed-url :scheme)]
+        module-path
+        (path/abspath module-path)))
+    (merge-into pkg-env (require module-path :exit true)))
+  (def f (fiber/new (fn [&] (eval-string expr))))
+  (fiber/setenv f pkg-env)
+  (resume f))
+
+(defn- build
+  []
+  (def parsed-args (argparse/argparse ;build-params))
+  (unless parsed-args
+    (os/exit 1))
+
+  (def module (parsed-args :default))
+  (def expr (or (get parsed-args "expression")
+                (do
+                  (unless module
+                    (error "please specify a module or expression to build"))
+                  (default-expression-from-module module))))
+  (def pkg (load-expr expr module))
+
+  (unless (= (type pkg) :hpkg/pkg)
+    (error (string/format "expression did not return a valid package, got %v" pkg)))
+
+  (print (hpkg/build pkg)))
+
+(defn main [& args]
   (hpkg/install-url-module-loader)
-  (repl nil nil repl-env nil nil))
+  
+  (setdyn :args (array/slice args 1))
+
+  (match args
+    [_ "init"]
+    (hpkg/init-pkg-store)
+    [_ "build"]
+    (build)
+    [_ "repl"]
+    (repl nil nil hpkg-env nil nil)
+    [_ "script"]
+    (do
+      (var f (get args 2))
+      (unless f
+        (error "expected a script to run"))
+      (setdyn :args (array/slice args 2))
+      (def e (dofile f :exit true))
+      (when-let [main (get-in e ['main :value])]
+        (main ;(dyn :args))))
+    _
+    (do
+      (eprintf "unknown command: %v, try one of init, build, repl, script" (get args 1))
+      (os/exit 1)))
+
+  (file/flush stdout)
+  (file/flush stderr)
+  
+  nil)
