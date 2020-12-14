@@ -5,9 +5,10 @@
 (import uri)
 (import argparse)
 
+(def hpkg-mod (require "hpkg"))
+
 (def hpkg-env
   (let [env (make-env)]
-    (def hpkg-mod (require "hpkg"))
     (each k (filter symbol? (keys hpkg-mod))
       (def v (in hpkg-mod k))
       (unless (in v :private)
@@ -74,6 +75,8 @@
 
 (defn main [& args]
   (hpkg/install-url-module-loader)
+  # Preload hpkg so imports don't load it again when we load from a quickbin
+  (put module/cache "hpkg" hpkg-mod)
   
   (setdyn :args (array/slice args 1))
 

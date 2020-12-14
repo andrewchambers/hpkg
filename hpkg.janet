@@ -273,6 +273,9 @@
     (eprintf "copying packages to %v..." out-path)
     (os/execute ["rsync" "--delete" "-a" ;all-fs-paths out-path] :xp)
 
+    # We lookup these paths now so the script doesn't depend
+    # on the users path to launch things, this isn't foolproof, but
+    # good enough for now.
     (spit run-path
           (string
             ```
