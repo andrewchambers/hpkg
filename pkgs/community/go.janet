@@ -15,7 +15,7 @@
   (hpkg/pkg
     :name "go"
     :make-depends [base-dev bash gcc-rt-lite bootstrap-go-src go-src]
-    :depends [gcc-rt-lite]
+    :depends []
     :build
     ```
     #! /bin/sh
@@ -30,9 +30,9 @@
     mkdir bin libexec
     cd libexec
     tar xf /src/go1*
-    mv * go-root
-    cd go-root/src
+    mv * goroot
+    cd goroot/src
     bash ./make.bash
-    ln -s "$out/libexec/go-root/bin/go" "$out/bin/go"
-    ln -s "$out/libexec/go-root/bin/gofmt" "$out/bin/gofmt"
+    ln -s "/libexec/goroot/bin/go" "$out/bin/go"
+    ln -s "/libexec/goroot/bin/gofmt" "$out/bin/gofmt"
     ```))
