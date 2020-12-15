@@ -264,7 +264,7 @@
 
               ```
                  ,configure
-                 ```
+            ```
 
               make -j$(nproc) install-strip DESTDIR="$out"
               
@@ -284,6 +284,7 @@
 (defbase coreutils
   :make-depends [gcc gcc-rt-lite make-static seed-bb coreutils-src]
   :depends [gcc-rt-lite]
+  :configure `./configure --prefix="" --disable-nls`
   :post-install `mkdir -p "$out/usr/bin"; ln -s /bin/env "$out/usr/bin/env"`)
 
 (defbase dash
@@ -293,6 +294,7 @@
 
 (defbase awk
   :make-depends [gcc gcc-rt-lite make seed-bb awk-src]
+  :configure `./configure --prefix="" --disable-nls`
   :depends [gcc-rt-lite])
 
 (defbase diffutils
@@ -305,7 +307,8 @@
 
 (defbase patch
   :make-depends [gcc gcc-rt-lite make seed-bb patch-src]
-  :depends [gcc-rt-lite])
+  :depends [gcc-rt-lite]
+  :post-install `rm "$out/lib/charset.alias"`)
 
 (defbase sed
   :make-depends [gcc gcc-rt-lite make seed-bb sed-src]
@@ -325,6 +328,7 @@
 
 (defbase tar
   :make-depends [gcc gcc-rt-lite make seed-bb tar-src]
+  :configure `./configure --prefix="" --disable-nls`
   :depends [gcc-rt-lite])
 
 (defbase xz
