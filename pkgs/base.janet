@@ -28,6 +28,17 @@
          ```
             :make-depends [seed]))
 
+(def seed-gcc-rt
+  (hpkg/pkg :name "seed-gcc-rt"
+            :build
+            ```
+         #! /bin/sh
+         set -eux
+         mkdir "$out"/lib
+         cp -vr /x86_64-linux-musl/lib/*.so* "$out/lib"
+         ```
+            :make-depends [seed]))
+
 (defsrc make-src
   :url
   "https://ftp.gnu.org/gnu/make/make-4.2.tar.gz"
@@ -198,26 +209,21 @@
     for f in /src/* ; do ln -s "$f" ./sources/$(basename "$f") ; done
     cat <<EOF > config.mak
     TARGET = x86_64-linux-musl
+    NATIVE = yes
     LINUX_VER = 4.19.90
     OUTPUT = $out
-    GCC_CONFIG += --disable-libquadmath --disable-decimal-float --disable-libitm --disable-fixed-point
-    COMMON_CONFIG += --with-build-sysroot=/ --enable-new-dtags
-    COMMON_CONFIG += CC="gcc -static --static"
-    COMMON_CONFIG += CXX="g++ -static --static"
+    GCC_CONFIG += --disable-libquadmath --disable-decimal-float --disable-libitm --disable-fixed-point --with-native-system-header-dir=/include
+    COMMON_CONFIG += --enable-new-dtags --with-sysroot 
+    COMMON_CONFIG += CC="gcc"
+    COMMON_CONFIG += CXX="g++"
     COMMON_CONFIG += CFLAGS="-O3" CXXFLAGS="-O3" LDFLAGS="-s"
     DL_CMD=false
     EOF
-    export HOSTCFLAGS="--static"
     make extract_all
     make -j $(nproc)
     make install
-    cd $out/bin
-    for l in ar as c++ g++ cpp cc gcc ld nm objcopy obdjump readelf ranlib strings strip
-    do
-      ln -s ./x86_64-linux-musl-$l $l
-    done
     ```
-    :make-depends [patch-static make-static seed gcc-src]))
+    :make-depends [patch-static make-static seed seed-gcc-rt gcc-src]))
 
 # XXX can we strip?
 (def gcc-rt-lite

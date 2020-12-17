@@ -19,7 +19,7 @@
     set -eux
     tar xf /src/*
     cd *
-    export CFLAGS="-I/include -L/lib -O2 --static"
+    export CFLAGS="-O2 --static"
     ./configure --prefix=""
     make install-strip -j$(nproc) DESTDIR="$out"
     ```))
