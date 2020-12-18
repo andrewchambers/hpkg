@@ -22,6 +22,6 @@
     tar xf /src/*
     cd *
     export PREFIX=""
-    make -j$(nproc)
+    make CC=gcc -j$(nproc)
     make install DESTDIR="$out"
     ```))
