@@ -88,7 +88,7 @@
     ranlib = "ranlib"
     linker = "gcc"
     crt-static = false
-    musl-root = "/x86_64-linux-musl"
+    musl-root = "/"
 
     [dist]
 
