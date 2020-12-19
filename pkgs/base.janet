@@ -8,7 +8,7 @@
                        :hash "sha256:7af191353cfe1569650d3f5503ddf1fd60166891995ce67deeb1e076a12c5821"}
                       {:path "seed.tar.gz"
                        :url "https://github.com/andrewchambers/hpkgs-seeds/blob/master/linux-x86_64-seed.tar.gz?raw=true"
-                       :hash "sha256:73f4d678e94d35575981c031c255e77ebd05899c0d4f4bb318f7fb848658a3ed"}]))
+                       :hash "sha256:e8e8c93b8662f06c3fa48acd266517356acb458962009ce39b5c8ca54eef7318"}]))
 
 (def seed
   (hpkg/pkg :name "seed"
@@ -212,8 +212,8 @@
     NATIVE = yes
     LINUX_VER = 4.19.90
     OUTPUT = $out
+    GCC_CONFIG += --enable-bootstrap --enable-default-pie --with-native-system-header-dir=/include
     GCC_CONFIG += --disable-libquadmath --disable-decimal-float --disable-libitm --disable-fixed-point
-    GCC_CONFIG += --enable-default-pie --with-native-system-header-dir=/include
     COMMON_CONFIG += --enable-new-dtags --with-sysroot
     COMMON_CONFIG += CC="gcc"
     COMMON_CONFIG += CXX="g++"
