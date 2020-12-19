@@ -75,7 +75,7 @@
 
 (defn open-pkg-store
   [&opt pkg-store-path]
-  
+
   (default pkg-store-path (pkg-store-path-from-env))
 
   (def pkg-store-path (path/abspath pkg-store-path))
@@ -206,8 +206,7 @@
           (when (fs-proc :exit-code)
             (error "fuse filesystem exited during setup"))))
 
-
-      (def container-toplevels 
+      (def container-toplevels
         (filter |(not (or (= $ "dev")
                           (= $ "proc")
                           (= $ "tmp")
@@ -229,8 +228,8 @@
         :xep
         {"HOME" "/homeless"
          "PATH" "/bin:/usr/bin:/usr/local/bin"
-         "out"  "/out"})
- 
+         "out" "/out"})
+
       (when (fs-proc :exit-code)
         (error "fuse filesystem exited during build")))
 
@@ -331,7 +330,7 @@
     (os/execute ["chmod" "+x" run-path] :xp))
   :ok)
 
-(defn cleanup-failed-packages
+(defn garbage-collect
   []
   (ensure-pkg-store-open)
 
@@ -341,14 +340,23 @@
     (error "unable to acquire an exclusive package store lock"))
 
   (defer (:close gc-lock)
-    (def pkgs-dir (path/join *store-path* "pkg"))
-    (def all-dirs (os/dir pkgs-dir))
-    (each d all-dirs
-      (def pkg-hash (last (string/split "-" d)))
-      (unless (has-pkg-with-hash? pkg-hash)
-        (def to-remove (path/join pkgs-dir d))
-        (eprintf "cleaning up %s..." to-remove)
-        (fsutil/nuke-path to-remove))))
+
+    (eprintf "cleaning up stale locks...")
+    (let [locks-dir (path/join *store-path* "lock")
+          all-lock-files (os/dir locks-dir)]
+      (each lf all-lock-files
+        (unless (= lf "gc.lock")
+          (os/rm (path/join locks-dir lf)))))
+
+    (eprintf "cleaning up failed builds...")
+    (let [pkgs-dir (path/join *store-path* "pkg")
+          all-pkg-dirs (os/dir pkgs-dir)]
+      (each d all-pkg-dirs
+        (def pkg-hash (last (string/split "-" d)))
+        (unless (has-pkg-with-hash? pkg-hash)
+          (def to-remove (path/join pkgs-dir d))
+          (eprintf "removing %s..." to-remove)
+          (fsutil/nuke-path to-remove)))))
   :ok)
 
 # Functions and macros for use by package definitions.

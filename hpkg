@@ -85,6 +85,8 @@
     (hpkg/init-pkg-store)
     [_ "build"]
     (build)
+    [_ "gc"]
+    (hpkg/garbage-collect)
     [_ "repl"]
     (repl nil nil hpkg-env nil nil)
     [_ "script"]

@@ -8,9 +8,9 @@
 
 (defsrc rust-bootstrap-src
   :url
-  "https://static.rust-lang.org/dist/rust-1.45.2-x86_64-unknown-linux-musl.tar.gz"
+  "https://static.rust-lang.org/dist/rust-1.48.0-x86_64-unknown-linux-musl.tar.gz"
   :hash
-  "sha256:1518bc5255c248a62a58562368e0a54f61fe02fd50f97f68882a65a62b100c17")
+  "sha256:4ed9627f57b4e0b9807fc5e7513d9731f4791668b7f875b9e44e65e21072c56f")
 
 (def rust-bootstrap
   (hpkg/pkg
@@ -32,9 +32,9 @@
 
 (defsrc rust-src
   :url
-  "https://static.rust-lang.org/dist/rustc-1.45.2-src.tar.gz"
+  "https://static.rust-lang.org/dist/rustc-1.48.0-src.tar.gz"
   :hash
-  "sha256:b7a3fc1e3ee367260ef945da867da0957f8983705f011ba2a73715375e50e308")
+  "sha256:0e763e6db47d5d6f91583284d2f989eacc49b84794d1443355b85c58d67ae43b")
 
 (def rust
   (hpkg/pkg

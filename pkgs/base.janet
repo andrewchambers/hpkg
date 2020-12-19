@@ -212,11 +212,12 @@
     NATIVE = yes
     LINUX_VER = 4.19.90
     OUTPUT = $out
-    GCC_CONFIG += --disable-libquadmath --disable-decimal-float --disable-libitm --disable-fixed-point --with-native-system-header-dir=/include
-    COMMON_CONFIG += --enable-new-dtags --with-sysroot 
+    GCC_CONFIG += --disable-libquadmath --disable-decimal-float --disable-libitm --disable-fixed-point
+    GCC_CONFIG += --enable-default-pie --with-native-system-header-dir=/include
+    COMMON_CONFIG += --enable-new-dtags --with-sysroot
     COMMON_CONFIG += CC="gcc"
     COMMON_CONFIG += CXX="g++"
-    COMMON_CONFIG += CFLAGS="-O3" CXXFLAGS="-O3" LDFLAGS="-s"
+    COMMON_CONFIG += CFLAGS="-O3 -pipe" CXXFLAGS="-O3 -pipe" LDFLAGS="-s"
     DL_CMD=false
     EOF
     make extract_all
