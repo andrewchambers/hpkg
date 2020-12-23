@@ -223,6 +223,8 @@
     make extract_all
     make -j $(nproc)
     make install
+    cd "$out/bin"
+    ln -s /lib/ld-musl-x86_64.so.1 ldd
     ```
     :make-depends [patch-static make-static seed seed-gcc-rt gcc-src]))
 
